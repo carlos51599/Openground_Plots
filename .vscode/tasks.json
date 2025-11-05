@@ -1,0 +1,28 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Launch Streamlit App",
+            "type": "shell",
+            "command": "streamlit",
+            "args": [
+                "run",
+                "app.py"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "new",
+                "focus": true
+            },
+            "runOptions": {
+                "instanceLimit": 1
+            },
+            "isBackground": true,
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ]
+}

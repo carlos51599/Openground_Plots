@@ -4745,11 +4745,22 @@ def generate_aline_plots(
             "error": Optional[str]
         }
     """
-    # Apply config overrides if provided
+    # Apply config overrides if provided (deep merge to preserve nested structure)
     if config_overrides:
-        for key, value in config_overrides.items():
-            if key in CONFIG:
-                CONFIG[key] = value
+
+        def deep_merge(base_dict, override_dict):
+            """Recursively merge override_dict into base_dict."""
+            for key, value in override_dict.items():
+                if (
+                    key in base_dict
+                    and isinstance(base_dict[key], dict)
+                    and isinstance(value, dict)
+                ):
+                    deep_merge(base_dict[key], value)
+                else:
+                    base_dict[key] = value
+
+        deep_merge(CONFIG, config_overrides)
 
     # Override output folder from parameter
     original_output = CONFIG["parameter"]["output_base_folder"]
@@ -4763,6 +4774,15 @@ def generate_aline_plots(
     if "location" in input_files:
         CONFIG["investigation_tracking"]["location_details_csv"] = str(
             input_files["location"]
+        )
+
+    # Override csv_source_folder to temp directory when running from Streamlit
+    # This allows load_parameter_data to find CSVs saved with their original names
+    original_csv_folder = CONFIG["parameter"]["csv_source_folder"]
+    if "classification" in input_files:
+        # Use the parent directory of the classification file as the CSV source folder
+        CONFIG["parameter"]["csv_source_folder"] = str(
+            input_files["classification"].parent
         )
 
     try:
@@ -4806,8 +4826,9 @@ def generate_aline_plots(
         }
 
     finally:
-        # Restore original output folder
+        # Restore original configuration
         CONFIG["parameter"]["output_base_folder"] = original_output
+        CONFIG["parameter"]["csv_source_folder"] = original_csv_folder
 
 
 def main():
@@ -4966,6 +4987,254 @@ def main():
     except Exception as e:
         logger.error(f"❌ EXECUTION FAILED: {e}")
         raise
+
+
+def generate_aline_plots(
+    input_files: Dict[str, Path],
+    output_dir: Path,
+    config_overrides: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Streamlit-compatible wrapper for A-line plot generation.
+
+    Args:
+        input_files: Dictionary with keys:
+            - 'mapping': Path to parameter mapping CSV
+            - 'location': Path to location details CSV
+            - 'classification': Path to classification by geology CSV
+        output_dir: Path to output directory
+        config_overrides: Optional configuration overrides from Streamlit UI
+
+    Returns:
+        Dictionary with results:
+            - 'success': bool
+            - 'plots_generated': int
+            - 'formations_processed': List[str]
+            - 'parameter_name': str
+            - 'output_folder': Path
+            - 'error': str (if success=False)
+    """
+    try:
+        # Apply configuration overrides
+        if config_overrides:
+            # Deep merge config overrides
+            import copy
+
+            working_config = copy.deepcopy(CONFIG)
+
+            # Apply outlier detection overrides
+            if "outlier_detection" in config_overrides:
+                for key, value in config_overrides["outlier_detection"].items():
+                    if (
+                        isinstance(value, dict)
+                        and key in working_config["outlier_detection"]
+                    ):
+                        working_config["outlier_detection"][key].update(value)
+                    else:
+                        working_config["outlier_detection"][key] = value
+
+            # Apply plotting overrides
+            if "plotting" in config_overrides:
+                for key, value in config_overrides["plotting"].items():
+                    if isinstance(value, dict) and key in working_config["plotting"]:
+                        working_config["plotting"][key].update(value)
+                    else:
+                        working_config["plotting"][key] = value
+
+            # Apply output control overrides
+            if "output_control" in config_overrides:
+                working_config["output_control"].update(
+                    config_overrides["output_control"]
+                )
+
+            # Update global CONFIG
+            CONFIG.update(working_config)
+
+        # Update CONFIG paths
+        CONFIG["parameter"]["mapping_csv"] = str(input_files["mapping"])
+        CONFIG["investigation_tracking"]["location_details_csv"] = str(
+            input_files["location"]
+        )
+        CONFIG["parameter"]["csv_source_folder"] = str(
+            input_files["classification"].parent
+        )
+        CONFIG["parameter"]["output_base_folder"] = str(output_dir)
+
+        parameter_name = CONFIG["parameter"]["name"]
+
+        logger.info("=" * 80)
+        logger.info("🚀 Streamlit A-line Plot Generator")
+        logger.info("=" * 80)
+        logger.info(f"Parameter: {parameter_name}")
+        logger.info(f"Mapping CSV: {input_files['mapping']}")
+        logger.info(f"Location CSV: {input_files['location']}")
+        logger.info(f"Classification CSV: {input_files['classification']}")
+        logger.info(f"Output Directory: {output_dir}")
+        logger.info("")
+
+        # === PHASE 1: PARAMETER MAPPING EXTRACTION ===
+        param_mappings = extract_parameter_mappings(
+            parameter_name, str(input_files["mapping"])
+        )
+
+        if param_mappings.empty:
+            error_msg = f"No data sources found for parameter '{parameter_name}'"
+            logger.error(f"❌ {error_msg}")
+            return {
+                "success": False,
+                "error": error_msg,
+                "plots_generated": 0,
+                "formations_processed": [],
+                "parameter_name": parameter_name,
+                "output_folder": output_dir,
+            }
+
+        logger.info("=" * 80)
+        logger.info("✅ Phase 1 Complete: Parameter mappings extracted")
+        logger.info("=" * 80)
+        logger.info("")
+
+        # === PHASE 2: CSV DATA LOADING ===
+        # Create a temporary CSV data dict with just the classification file
+        csv_files = [input_files["classification"]]
+        csv_data_dict = load_csv_data(csv_files)
+
+        if not csv_data_dict:
+            error_msg = "No CSV data successfully loaded"
+            logger.error(f"❌ {error_msg}")
+            return {
+                "success": False,
+                "error": error_msg,
+                "plots_generated": 0,
+                "formations_processed": [],
+                "parameter_name": parameter_name,
+                "output_folder": output_dir,
+            }
+
+        logger.info("=" * 80)
+        logger.info("✅ Phase 2 Complete: CSV data loaded")
+        logger.info("=" * 80)
+        logger.info("")
+
+        # === PHASE 3: FORMATION GROUPING ===
+        formation_groups = group_data_by_formation(csv_data_dict, param_mappings)
+
+        if not formation_groups:
+            error_msg = "No formation groups created"
+            logger.error(f"❌ {error_msg}")
+            return {
+                "success": False,
+                "error": error_msg,
+                "plots_generated": 0,
+                "formations_processed": [],
+                "parameter_name": parameter_name,
+                "output_folder": output_dir,
+            }
+
+        logger.info("=" * 80)
+        logger.info("✅ Phase 3 Complete: Data grouped by formations")
+        logger.info("=" * 80)
+        logger.info("")
+
+        # === PHASE 3b: OUTLIER FILTERING ===
+        filter_outliers_from_formations(formation_groups, param_mappings)
+
+        logger.info("=" * 80)
+        logger.info("✅ Phase 3b Complete: Outlier filtering applied")
+        logger.info("=" * 80)
+        logger.info("")
+
+        # === CREATE CLEAN COPY FOR PHASE 5 ===
+        formation_groups_without_outliers = {}
+        for formation_name, csv_dict in formation_groups.items():
+            formation_groups_without_outliers[formation_name] = {}
+            for csv_name, df in csv_dict.items():
+                if "is_outlier" in df.columns:
+                    df_clean = df[~df["is_outlier"]].copy()
+                else:
+                    df_clean = df.copy()
+                formation_groups_without_outliers[formation_name][csv_name] = df_clean
+
+        # === PHASE 4: INVESTIGATION SERIES PLOT GENERATION ===
+        parameter_display_name = "A-line Chart"
+
+        generate_investigation_series_plots(
+            formation_groups,
+            param_mappings,
+            parameter_name,
+            parameter_display_name,
+            str(output_dir),
+        )
+
+        logger.info("=" * 80)
+        logger.info("✅ Phase 4 Complete: A-line plots generated")
+        logger.info("=" * 80)
+        logger.info("")
+
+        # === PHASE 5: INVESTIGATION SOURCE TRACKING ===
+        parameter_output_folder = output_dir / parameter_name
+
+        generate_investigation_summary(
+            formation_groups,
+            formation_groups_without_outliers,
+            param_mappings,
+            parameter_name,
+            parameter_output_folder,
+        )
+
+        logger.info("=" * 80)
+        logger.info("✅ Phase 5 Complete: Investigation tracking finished")
+        logger.info("=" * 80)
+        logger.info("")
+
+        # === PHASE 6: EXCEL EXPORT ===
+        generate_excel_exports(
+            formation_groups,
+            param_mappings,
+            parameter_name,
+            parameter_output_folder,
+        )
+
+        logger.info("=" * 80)
+        logger.info("✅ Phase 6 Complete: Excel exports finished")
+        logger.info("=" * 80)
+        logger.info("")
+
+        # Count generated plots
+        plot_count = 0
+        formation_list = list(formation_groups.keys())
+
+        # Count plots from investigation_series folder
+        investigation_series_folder = parameter_output_folder / "investigation_series"
+        if investigation_series_folder.exists():
+            for subfolder in ["with_outliers", "without_outliers"]:
+                plot_folder = investigation_series_folder / subfolder
+                if plot_folder.exists():
+                    plot_count += sum(1 for f in plot_folder.glob("*.png"))
+
+        logger.info("🎉 A-line plot generation complete!")
+
+        return {
+            "success": True,
+            "plots_generated": plot_count,
+            "formations_processed": formation_list,
+            "parameter_name": parameter_name,
+            "output_folder": output_dir,
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Streamlit execution failed: {e}")
+        import traceback
+
+        logger.error(traceback.format_exc())
+        return {
+            "success": False,
+            "error": str(e),
+            "plots_generated": 0,
+            "formations_processed": [],
+            "parameter_name": "ALine",
+            "output_folder": output_dir,
+        }
 
 
 if __name__ == "__main__":

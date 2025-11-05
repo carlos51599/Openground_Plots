@@ -45,24 +45,22 @@ def validate_csv_files(files: Dict[str, Any]) -> Dict[str, Any]:
     # Validate mapping CSV
     try:
         mapping_df = pd.read_csv(io.BytesIO(files["mapping"].getvalue()))
-        required_mapping_cols = ["Parameter", "CSV Source", "Column Name"]
-        missing_cols = [c for c in required_mapping_cols if c not in mapping_df.columns]
+        # Check for parameter column (case insensitive)
+        param_col = None
+        for col in mapping_df.columns:
+            if col.lower() == "parameter":
+                param_col = col
+                break
 
-        if missing_cols:
-            errors.append(
-                f"Mapping CSV missing required columns: {', '.join(missing_cols)}"
-            )
-
-        # Check if LiquidLimit and PlasticityIndex are mapped
-        params = (
-            mapping_df["Parameter"].tolist()
-            if "Parameter" in mapping_df.columns
-            else []
-        )
-        if "LiquidLimit" not in params:
-            errors.append("Mapping CSV missing 'LiquidLimit' parameter")
-        if "PlasticityIndex" not in params:
-            errors.append("Mapping CSV missing 'PlasticityIndex' parameter")
+        if param_col is None:
+            errors.append("Mapping CSV missing 'parameter' column")
+        else:
+            # Check if LiquidLimit and PlasticityIndex are mapped
+            params = mapping_df[param_col].tolist()
+            if "LiquidLimit" not in params:
+                errors.append("Mapping CSV missing 'LiquidLimit' parameter")
+            if "PlasticityIndex" not in params:
+                errors.append("Mapping CSV missing 'PlasticityIndex' parameter")
 
     except Exception as e:
         errors.append(f"Error reading mapping CSV: {str(e)}")
@@ -151,12 +149,12 @@ def save_uploaded_files(
 
     for key, file_obj in uploaded_files.items():
         if file_obj is not None:
-            # Determine file extension
+            # Use original filename to preserve parameter mapping compatibility
+            # This ensures the saved filename matches what's in the mapping CSV
             original_name = file_obj.name
-            extension = Path(original_name).suffix if "." in original_name else ".csv"
 
-            # Save file
-            file_path = temp_dir / f"{key}{extension}"
+            # Save file with original name
+            file_path = temp_dir / original_name
             with open(file_path, "wb") as f:
                 f.write(file_obj.getvalue())
 

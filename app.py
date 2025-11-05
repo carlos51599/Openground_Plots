@@ -95,11 +95,11 @@ with tab1:
     with col1:
         st.subheader("Required Files")
 
-        st.session_state.uploaded_files["mapping"] = st.file_uploader(
-            "📋 Parameter Mapping CSV",
+        st.session_state.uploaded_files["classification"] = st.file_uploader(
+            "� Classification by Geology CSV",
             type=["csv"],
-            key="mapping_upload",
-            help="Global parameter mapping file (e.g., Global_Parameter_Mapping_Extraction_only_CORRECTED.csv)",
+            key="classification_upload",
+            help="Classification by Geology CSV with LiquidLimit and PlasticityIndex data",
         )
 
         st.session_state.uploaded_files["location"] = st.file_uploader(
@@ -109,18 +109,21 @@ with tab1:
             help="Location Details CSV with Location ID and Investigation columns",
         )
 
-        st.session_state.uploaded_files["classification"] = st.file_uploader(
-            "🔬 Classification by Geology CSV",
-            type=["csv"],
-            key="classification_upload",
-            help="Classification by Geology CSV with LiquidLimit and PlasticityIndex data",
-        )
-
     with col2:
         st.subheader("Upload Status")
 
-        # Show upload status
-        for file_key, file_obj in st.session_state.uploaded_files.items():
+        # Show mapping file status (from repo)
+        mapping_path = (
+            app_dir / "Global_Parameter_Mapping_Extraction_only_CORRECTED.csv"
+        )
+        if mapping_path.exists():
+            st.success(f"✅ Parameter Mapping: {mapping_path.name} (from repo)")
+        else:
+            st.error("❌ Parameter Mapping file not found in repo")
+
+        # Show upload status for user files
+        for file_key in ["classification", "location"]:
+            file_obj = st.session_state.uploaded_files.get(file_key)
             if file_obj:
                 st.success(f"✅ {file_key.title()}: {file_obj.name}")
             else:
@@ -128,7 +131,29 @@ with tab1:
 
         # Validation button
         if st.button("🔍 Validate Files", type="secondary"):
-            validation_result = validate_csv_files(st.session_state.uploaded_files)
+            # Add mapping file to validation dict
+            validation_files = st.session_state.uploaded_files.copy()
+            if mapping_path.exists():
+                with open(mapping_path, "rb") as f:
+                    from io import BytesIO
+
+                    mapping_buffer = BytesIO(f.read())
+                    mapping_buffer.name = mapping_path.name
+
+                    # Create a mock uploaded file object
+                    class MockFile:
+                        def __init__(self, buffer, name):
+                            self._buffer = buffer
+                            self.name = name
+
+                        def getvalue(self):
+                            return self._buffer.getvalue()
+
+                    validation_files["mapping"] = MockFile(
+                        mapping_buffer, mapping_path.name
+                    )
+
+            validation_result = validate_csv_files(validation_files)
 
             if validation_result["is_valid"]:
                 st.success("✅ All files validated successfully!")
@@ -158,7 +183,7 @@ with tab2:
 
         iqr_multiplier = st.slider(
             "IQR Multiplier",
-            min_value=1.0,
+            min_value=0.0,
             max_value=3.0,
             value=1.5,
             step=0.1,
@@ -208,7 +233,7 @@ with tab2:
         enable_plots = st.checkbox("Generate Plots", value=True)
         if enable_plots:
             enable_with_outliers = st.checkbox("  • With Outliers", value=True)
-            enable_without_outliers = st.checkbox("  • Without Outliers", value=True)
+            enable_without_outliers = st.checkbox("  • Without Outliers", value=False)
             enable_plotly = st.checkbox("  • Interactive HTML", value=True)
 
     with col4:
@@ -248,21 +273,48 @@ with tab2:
 with tab3:
     st.header("Generate Plots")
 
-    # Check if all files are uploaded
+    # Check if all required files are uploaded
     all_files_uploaded = all(
         st.session_state.uploaded_files.get(key) is not None
-        for key in ["mapping", "location", "classification"]
+        for key in ["location", "classification"]
     )
+
+    # Check if mapping file exists in repo
+    mapping_path = app_dir / "Global_Parameter_Mapping_Extraction_only_CORRECTED.csv"
+    mapping_exists = mapping_path.exists()
 
     if not all_files_uploaded:
         st.warning("⚠️ Please upload all required files in the Upload Files tab")
+    elif not mapping_exists:
+        st.error("❌ Parameter mapping file not found in repository")
     else:
         # Generate plots button
         if st.button(
             "🚀 Generate A-line Plots", type="primary", use_container_width=True
         ):
+            # Prepare validation files with mapping from repo
+            validation_files = st.session_state.uploaded_files.copy()
+            with open(mapping_path, "rb") as f:
+                from io import BytesIO
+
+                mapping_buffer = BytesIO(f.read())
+                mapping_buffer.name = mapping_path.name
+
+                # Create a mock uploaded file object
+                class MockFile:
+                    def __init__(self, buffer, name):
+                        self._buffer = buffer
+                        self.name = name
+
+                    def getvalue(self):
+                        return self._buffer.getvalue()
+
+                validation_files["mapping"] = MockFile(
+                    mapping_buffer, mapping_path.name
+                )
+
             # Validate files first
-            validation_result = validate_csv_files(st.session_state.uploaded_files)
+            validation_result = validate_csv_files(validation_files)
 
             if not validation_result["is_valid"]:
                 st.error("❌ Validation failed:")
@@ -288,13 +340,23 @@ with tab3:
                             st.session_state.uploaded_files, temp_path
                         )
 
+                        # Add mapping file from repo
+                        input_files["mapping"] = mapping_path
+
                         # Create output directory
                         output_dir = temp_path / "output"
                         output_dir.mkdir(exist_ok=True)
 
+                        # Map file keys to expected format for generate_aline_plots
+                        aline_input = {
+                            "mapping": input_files["mapping"],
+                            "location": input_files["location"],
+                            "classification": input_files["classification"],
+                        }
+
                         # Generate plots
                         results = generate_aline_plots(
-                            input_files=input_files,
+                            input_files=aline_input,
                             output_dir=output_dir,
                             config_overrides=st.session_state.config_overrides,
                         )
