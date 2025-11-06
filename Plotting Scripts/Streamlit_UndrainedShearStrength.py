@@ -6627,5 +6627,321 @@ def main():
         raise
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# ⚡ STREAMLIT WRAPPER FUNCTION
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def generate_strength_plots(
+    input_files: Dict[str, Path],
+    output_dir: Path,
+    config_overrides: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Streamlit-compatible wrapper for Undrained Shear Strength plot generation.
+
+    Args:
+        input_files: Dictionary with keys:
+            - 'mapping': Path to parameter mapping CSV
+            - 'location': Path to location details CSV
+            - Multiple CSV files for different test types (SPT, CPT, etc.)
+        output_dir: Path to output directory
+        config_overrides: Optional configuration overrides from Streamlit UI
+
+    Returns:
+        Dictionary with results:
+            - 'success': bool
+            - 'plots_generated': int
+            - 'formations_processed': List[str]
+            - 'parameter_name': str
+            - 'output_folder': Path
+            - 'error': str (if success=False)
+    """
+    try:
+        # Apply configuration overrides
+        if config_overrides:
+            # Deep merge config overrides
+            import copy
+
+            working_config = copy.deepcopy(CONFIG)
+
+            # Apply outlier detection overrides
+            if "outlier_detection" in config_overrides:
+                for key, value in config_overrides["outlier_detection"].items():
+                    if (
+                        isinstance(value, dict)
+                        and key in working_config["outlier_detection"]
+                    ):
+                        working_config["outlier_detection"][key].update(value)
+                    else:
+                        working_config["outlier_detection"][key] = value
+
+            # Apply plotting overrides
+            if "plotting" in config_overrides:
+                for key, value in config_overrides["plotting"].items():
+                    if isinstance(value, dict) and key in working_config["plotting"]:
+                        working_config["plotting"][key].update(value)
+                    else:
+                        working_config["plotting"][key] = value
+
+            # Apply output control overrides
+            if "output_control" in config_overrides:
+                working_config["output_control"].update(
+                    config_overrides["output_control"]
+                )
+
+            # Update global CONFIG
+            CONFIG.update(working_config)
+
+        # Update CONFIG paths
+        CONFIG["parameter"]["mapping_csv"] = str(input_files["mapping"])
+        CONFIG["investigation_tracking"]["location_details_csv"] = str(
+            input_files["location"]
+        )
+
+        # Get CSV source folder from any of the input CSV files (excluding mapping and location)
+        csv_files = [
+            v for k, v in input_files.items() if k not in ["mapping", "location"]
+        ]
+        if csv_files:
+            CONFIG["parameter"]["csv_source_folder"] = str(csv_files[0].parent)
+
+        CONFIG["parameter"]["output_base_folder"] = str(output_dir)
+
+        parameter_name = CONFIG["parameter"]["name"]
+
+        logger.info("=" * 80)
+        logger.info("🚀 Streamlit Undrained Shear Strength Plot Generator")
+        logger.info("=" * 80)
+        logger.info(f"Parameter: {parameter_name}")
+        logger.info(f"Mapping CSV: {input_files['mapping']}")
+        logger.info(f"Location CSV: {input_files['location']}")
+        logger.info(f"Data CSV files: {len(csv_files)}")
+        logger.info(f"Output Directory: {output_dir}")
+        logger.info("")
+
+        # === PHASE 1: PARAMETER MAPPING EXTRACTION ===
+        param_mappings = extract_parameter_mappings(
+            parameter_name, str(input_files["mapping"])
+        )
+
+        if param_mappings.empty:
+            error_msg = f"No data sources found for parameter '{parameter_name}'"
+            logger.error(f"❌ {error_msg}")
+            return {
+                "success": False,
+                "error": error_msg,
+                "plots_generated": 0,
+                "formations_processed": [],
+                "parameter_name": parameter_name,
+                "output_folder": output_dir,
+            }
+
+        logger.info("=" * 80)
+        logger.info("✅ Phase 1 Complete: Parameter mappings extracted")
+        logger.info("=" * 80)
+        logger.info("")
+
+        # === PHASE 2: CSV DATA LOADING ===
+        csv_data_dict = load_csv_data(csv_files)
+
+        if not csv_data_dict:
+            error_msg = "No CSV data successfully loaded"
+            logger.error(f"❌ {error_msg}")
+            return {
+                "success": False,
+                "error": error_msg,
+                "plots_generated": 0,
+                "formations_processed": [],
+                "parameter_name": parameter_name,
+                "output_folder": output_dir,
+            }
+
+        logger.info("=" * 80)
+        logger.info("✅ Phase 2 Complete: CSV data loaded")
+        logger.info("=" * 80)
+        logger.info("")
+
+        # === PHASE 3: FORMATION GROUPING ===
+        formation_groups = group_data_by_formation(csv_data_dict, param_mappings)
+
+        if not formation_groups:
+            error_msg = "No formation groups created"
+            logger.error(f"❌ {error_msg}")
+            return {
+                "success": False,
+                "error": error_msg,
+                "plots_generated": 0,
+                "formations_processed": [],
+                "parameter_name": parameter_name,
+                "output_folder": output_dir,
+            }
+
+        logger.info("=" * 80)
+        logger.info("✅ Phase 3 Complete: Data grouped by formations")
+        logger.info("=" * 80)
+        logger.info("")
+
+        # === PHASE 3b: OUTLIER FILTERING ===
+        parameter_display_name = CONFIG["parameter"]["display_name"]
+
+        filter_outliers_from_formations(formation_groups, param_mappings)
+
+        logger.info("=" * 80)
+        logger.info("✅ Phase 3b Complete: Outlier filtering applied")
+        logger.info("=" * 80)
+        logger.info("")
+
+        # === CREATE CLEAN COPY FOR PHASE 5 ===
+        formation_groups_without_outliers = {}
+        for formation_name, csv_dict in formation_groups.items():
+            formation_groups_without_outliers[formation_name] = {}
+            for csv_name, df in csv_dict.items():
+                if "is_outlier" in df.columns:
+                    df_clean = df[~df["is_outlier"]].copy()
+                else:
+                    df_clean = df.copy()
+                formation_groups_without_outliers[formation_name][csv_name] = df_clean
+
+        # === PHASE 3c: MANUAL OUTLIER MARKING (OPTIONAL) ===
+        if CONFIG["manual_outlier_exclusion"]["enabled"]:
+            logger.info("")
+
+            excel_file_path = CONFIG["manual_outlier_exclusion"]["excel_file"]
+            sheet_mapping = CONFIG["manual_outlier_exclusion"]["sheets"]
+
+            # Check if Excel file exists
+            if Path(excel_file_path).exists():
+                manual_outliers_df = load_manual_outliers(
+                    parameter_name=parameter_name,
+                    excel_file=excel_file_path,
+                    sheet_mapping=sheet_mapping,
+                )
+
+                param_tolerance = CONFIG["manual_outlier_exclusion"]["match_tolerance"][
+                    "parameter"
+                ]
+                depth_tolerance = CONFIG["manual_outlier_exclusion"]["match_tolerance"][
+                    "depth"
+                ]
+
+                mark_manual_outliers(
+                    formation_groups=formation_groups,
+                    manual_outliers_df=manual_outliers_df,
+                    parameter_mappings=param_mappings,
+                    param_tolerance=param_tolerance,
+                    depth_tolerance=depth_tolerance,
+                )
+
+                logger.info("=" * 80)
+                logger.info("✅ Phase 3c Complete: Manual outliers marked")
+                logger.info("=" * 80)
+                logger.info("")
+            else:
+                logger.warning(
+                    f"⚠️ Manual outlier Excel file not found: {excel_file_path}"
+                )
+                logger.info("Skipping Phase 3c (Manual Outlier Marking)")
+
+        # === PHASE 4: INVESTIGATION SERIES PLOT GENERATION ===
+        try:
+            generate_investigation_series_plots(
+                formation_groups,
+                param_mappings,
+                parameter_name,
+                parameter_display_name,
+                str(output_dir),
+            )
+
+            logger.info("=" * 80)
+            logger.info("✅ Phase 4 Complete: Investigation-series plots generated")
+            logger.info("=" * 80)
+            logger.info("")
+
+        except Exception as phase4_error:
+            logger.error(f"❌ Phase 4 failed: {str(phase4_error)}")
+            logger.warning("⚠️ Continuing without investigation-series plots...")
+
+        # === PHASE 5: INVESTIGATION SOURCE TRACKING ===
+        try:
+            parameter_output = Path(output_dir) / parameter_name
+            generate_investigation_summary(
+                formation_groups,
+                formation_groups_without_outliers,
+                param_mappings,
+                parameter_name,
+                parameter_output,
+            )
+
+            logger.info("=" * 80)
+            logger.info("✅ Phase 5 Complete: Investigation tracking finished")
+            logger.info("=" * 80)
+            logger.info("")
+
+        except Exception as phase5_error:
+            logger.error(f"❌ Phase 5 failed: {str(phase5_error)}")
+            logger.warning("⚠️ Continuing without investigation tracking...")
+
+        # === PHASE 6: EXCEL EXPORT WITH HIGHLIGHTED OUTLIERS ===
+        try:
+            parameter_output = Path(output_dir) / parameter_name
+            generate_excel_exports(
+                formation_groups,
+                param_mappings,
+                parameter_name,
+                parameter_output,
+            )
+
+            logger.info("=" * 80)
+            logger.info("✅ Phase 6 Complete: Excel exports finished")
+            logger.info("=" * 80)
+            logger.info("")
+
+        except Exception as phase6_error:
+            logger.error(f"❌ Phase 6 failed: {str(phase6_error)}")
+            logger.warning("⚠️ Continuing without Excel exports...")
+
+        # Count generated plots
+        plot_count = 0
+        formation_list = list(formation_groups.keys())
+
+        # Count plots from investigation_series folder
+        parameter_output_folder = output_dir / parameter_name
+        investigation_series_folder = parameter_output_folder / "investigation_series"
+        if investigation_series_folder.exists():
+            for subfolder in [
+                "with_outliers",
+                "without_outliers",
+                "manually_identified_excluded",
+            ]:
+                plot_folder = investigation_series_folder / subfolder
+                if plot_folder.exists():
+                    plot_count += sum(1 for f in plot_folder.glob("*.png"))
+
+        logger.info("🎉 Undrained Shear Strength plot generation complete!")
+
+        return {
+            "success": True,
+            "plots_generated": plot_count,
+            "formations_processed": formation_list,
+            "parameter_name": parameter_name,
+            "output_folder": output_dir,
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Streamlit execution failed: {e}")
+        import traceback
+
+        logger.error(traceback.format_exc())
+        return {
+            "success": False,
+            "error": str(e),
+            "plots_generated": 0,
+            "formations_processed": [],
+            "parameter_name": "UndrainedShearStrength",
+            "output_folder": output_dir,
+        }
+
+
 if __name__ == "__main__":
     main()

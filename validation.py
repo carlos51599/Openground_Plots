@@ -19,13 +19,15 @@ import io
 # ═════════════════════════════════════════════════════════════════════════
 
 
-def validate_csv_files(files: Dict[str, Any]) -> Dict[str, Any]:
+def validate_csv_files(
+    files: Dict[str, Any], plot_type: str = "aline"
+) -> Dict[str, Any]:
     """
     Validate uploaded CSV files for geotechnical processing.
 
     Args:
         files: Dictionary of uploaded file objects
-               {"mapping": UploadedFile, "location": UploadedFile, "classification": UploadedFile}
+        plot_type: Type of plot ("aline" or "strength")
 
     Returns:
         Dictionary with validation results
@@ -34,13 +36,29 @@ def validate_csv_files(files: Dict[str, Any]) -> Dict[str, Any]:
     errors: List[str] = []
     warnings: List[str] = []
 
-    # Check if all required files are present
-    required_files = ["mapping", "location", "classification"]
+    # Check if all required files are present based on plot type
+    if plot_type == "aline":
+        required_files = ["mapping", "location", "classification"]
+    else:
+        # For strength plots, need mapping, location, and at least one test file
+        required_files = ["mapping", "location"]
+
     missing_files = [f for f in required_files if not files.get(f)]
 
     if missing_files:
         errors.append(f"Missing required files: {', '.join(missing_files)}")
         return {"is_valid": False, "errors": errors, "warnings": warnings}
+
+    # For strength plots, verify at least one test data file is present
+    if plot_type == "strength":
+        test_files = [
+            k for k in files.keys() if k not in ["mapping", "location"] and files[k]
+        ]
+        if not test_files:
+            errors.append(
+                "At least one test data CSV file is required for strength plots"
+            )
+            return {"is_valid": False, "errors": errors, "warnings": warnings}
 
     # Validate mapping CSV
     try:
@@ -55,12 +73,20 @@ def validate_csv_files(files: Dict[str, Any]) -> Dict[str, Any]:
         if param_col is None:
             errors.append("Mapping CSV missing 'parameter' column")
         else:
-            # Check if LiquidLimit and PlasticityIndex are mapped
-            params = mapping_df[param_col].tolist()
-            if "LiquidLimit" not in params:
-                errors.append("Mapping CSV missing 'LiquidLimit' parameter")
-            if "PlasticityIndex" not in params:
-                errors.append("Mapping CSV missing 'PlasticityIndex' parameter")
+            if plot_type == "aline":
+                # Check if LiquidLimit and PlasticityIndex are mapped
+                params = mapping_df[param_col].tolist()
+                if "LiquidLimit" not in params:
+                    errors.append("Mapping CSV missing 'LiquidLimit' parameter")
+                if "PlasticityIndex" not in params:
+                    errors.append("Mapping CSV missing 'PlasticityIndex' parameter")
+            else:
+                # For strength plots, check for UndrainedShearStrength
+                params = mapping_df[param_col].tolist()
+                if "UndrainedShearStrength" not in params:
+                    errors.append(
+                        "Mapping CSV missing 'UndrainedShearStrength' parameter"
+                    )
 
     except Exception as e:
         errors.append(f"Error reading mapping CSV: {str(e)}")
@@ -83,51 +109,54 @@ def validate_csv_files(files: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:
         errors.append(f"Error reading location CSV: {str(e)}")
 
-    # Validate classification CSV
-    try:
-        classification_df = pd.read_csv(io.BytesIO(files["classification"].getvalue()))
-
-        # Check for geology and depth columns
-        has_geology = any(
-            col in classification_df.columns
-            for col in [
-                "GeologyCode",
-                "Geology Code",
-                "GeologyCodeDescription",
-                "Geology Code Description",
-            ]
-        )
-        has_depth = any(
-            col in classification_df.columns
-            for col in ["DepthTop", "SampleTop", "Test Depth", "Top Depth"]
-        )
-
-        if not has_geology:
-            errors.append("Classification CSV missing geology columns")
-        if not has_depth:
-            errors.append("Classification CSV missing depth columns")
-
-        # Check for parameter columns (should have at least one of LL or PI)
-        has_ll = (
-            "LiquidLimit" in classification_df.columns
-            or "Liquid Limit" in classification_df.columns
-        )
-        has_pi = (
-            "PlasticityIndex" in classification_df.columns
-            or "Plasticity Index" in classification_df.columns
-        )
-
-        if not (has_ll or has_pi):
-            errors.append(
-                "Classification CSV missing both 'LiquidLimit' and 'PlasticityIndex' columns"
+    # Validate classification CSV (A-line only)
+    if plot_type == "aline":
+        try:
+            classification_df = pd.read_csv(
+                io.BytesIO(files["classification"].getvalue())
             )
-        elif not has_ll:
-            warnings.append("Classification CSV missing 'LiquidLimit' column")
-        elif not has_pi:
-            warnings.append("Classification CSV missing 'PlasticityIndex' column")
 
-    except Exception as e:
-        errors.append(f"Error reading classification CSV: {str(e)}")
+            # Check for geology and depth columns
+            has_geology = any(
+                col in classification_df.columns
+                for col in [
+                    "GeologyCode",
+                    "Geology Code",
+                    "GeologyCodeDescription",
+                    "Geology Code Description",
+                ]
+            )
+            has_depth = any(
+                col in classification_df.columns
+                for col in ["DepthTop", "SampleTop", "Test Depth", "Top Depth"]
+            )
+
+            if not has_geology:
+                errors.append("Classification CSV missing geology columns")
+            if not has_depth:
+                errors.append("Classification CSV missing depth columns")
+
+            # Check for parameter columns (should have at least one of LL or PI)
+            has_ll = (
+                "LiquidLimit" in classification_df.columns
+                or "Liquid Limit" in classification_df.columns
+            )
+            has_pi = (
+                "PlasticityIndex" in classification_df.columns
+                or "Plasticity Index" in classification_df.columns
+            )
+
+            if not (has_ll or has_pi):
+                errors.append(
+                    "Classification CSV missing both 'LiquidLimit' and 'PlasticityIndex' columns"
+                )
+            elif not has_ll:
+                warnings.append("Classification CSV missing 'LiquidLimit' column")
+            elif not has_pi:
+                warnings.append("Classification CSV missing 'PlasticityIndex' column")
+
+        except Exception as e:
+            errors.append(f"Error reading classification CSV: {str(e)}")
 
     return {"is_valid": len(errors) == 0, "errors": errors, "warnings": warnings}
 
