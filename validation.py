@@ -57,8 +57,20 @@ def get_parameter_source_files(
     if not mapping_path.exists():
         raise FileNotFoundError(f"Mapping CSV not found: {mapping_path}")
 
-    # Read mapping CSV
-    mapping_df = pd.read_csv(mapping_path)
+    # Read mapping CSV with defensive error handling
+    try:
+        mapping_df = pd.read_csv(mapping_path)
+    except Exception as e:
+        raise ValueError(f"Failed to read mapping CSV: {str(e)}") from e
+
+    # Validate required columns exist
+    required_columns = ["parameter", "csv_file"]
+    missing_columns = [col for col in required_columns if col not in mapping_df.columns]
+    if missing_columns:
+        raise ValueError(
+            f"Mapping CSV missing required columns: {', '.join(missing_columns)}. "
+            f"Found columns: {', '.join(mapping_df.columns)}"
+        )
 
     # Collect all required parameters for selected plot types
     required_params: Set[str] = set()
@@ -88,7 +100,7 @@ def get_parameter_source_files(
 
 def get_required_files_from_mapping(
     mapping_path: Path, plot_types: List[str]
-) -> Dict[str, Set[str]]:
+) -> Dict[str, Any]:
     """
     Extract ALL possible CSV files from mapping CSV based on plot types.
 
@@ -104,12 +116,20 @@ def get_required_files_from_mapping(
         - "all_files": Set of all possible CSV filenames
         - "required_parameters": Set of required parameter names
         - "parameter_sources": Dict mapping parameter -> list of source files
+
+    Raises:
+        FileNotFoundError: If mapping CSV doesn't exist
+        ValueError: If mapping CSV is invalid or missing required columns
     """
     if not mapping_path.exists():
         raise FileNotFoundError(f"Mapping CSV not found: {mapping_path}")
 
-    # Get parameter source file mapping
-    param_sources = get_parameter_source_files(mapping_path, plot_types)
+    # Get parameter source file mapping (with validation)
+    try:
+        param_sources = get_parameter_source_files(mapping_path, plot_types)
+    except Exception as e:
+        # Re-raise with more context
+        raise ValueError(f"Error processing mapping CSV: {str(e)}") from e
 
     # Collect all required parameters
     required_params: Set[str] = set(param_sources.keys())
@@ -118,7 +138,8 @@ def get_required_files_from_mapping(
     all_files: Set[str] = set()
     for sources in param_sources.values():
         for source in sources:
-            all_files.add(source["csv_file"])
+            if "csv_file" in source:
+                all_files.add(source["csv_file"])
 
     return {
         "all_files": all_files,

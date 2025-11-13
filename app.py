@@ -778,14 +778,34 @@ with tab1:
     # Get dynamic file requirements from mapping CSV
     mapping_path = app_dir / "Global_Parameter_Mapping_Extraction_only_CORRECTED.csv"
 
+    # Add debugging for Streamlit Cloud
+    if not mapping_path.exists():
+        st.error(
+            f"❌ **Mapping CSV file not found!**\n\n"
+            f"Expected location: `{mapping_path}`\n\n"
+            f"App directory: `{app_dir}`\n\n"
+            f"Files in app directory: {list(app_dir.glob('*.csv'))}"
+        )
+        st.stop()
+
     if len(st.session_state.plot_types) > 0 and mapping_path.exists():
         try:
             # Get parameter-aware file requirements from mapping
             file_requirements = get_required_files_from_mapping(
                 mapping_path, list(st.session_state.plot_types)
             )
+
+            # Defensive check for required keys
+            if "parameter_sources" not in file_requirements:
+                st.error(
+                    "❌ **Error:** Mapping CSV structure is incomplete. "
+                    "Missing 'parameter_sources' data. "
+                    "Please check that the mapping CSV has 'parameter' and 'csv_file' columns."
+                )
+                st.stop()
+
             parameter_sources = file_requirements["parameter_sources"]
-            all_files = sorted(file_requirements["all_files"])
+            all_files = sorted(file_requirements.get("all_files", []))
 
             # Display info about parameter-based file requirements
             st.markdown("**📊 Plot-Specific Data Files:**")
@@ -883,8 +903,27 @@ with tab1:
                             )
                         )
 
+        except FileNotFoundError as e:
+            st.error(f"❌ **File Not Found:** {str(e)}")
+            st.info(
+                "ℹ️ The mapping CSV file should be in the same directory as app.py. "
+                f"Expected location: `{mapping_path}`"
+            )
+        except ValueError as e:
+            st.error(f"❌ **Mapping CSV Error:** {str(e)}")
+            st.info(
+                "ℹ️ Please ensure the mapping CSV has the required columns: "
+                "'parameter', 'csv_file', and optionally 'priority_rank'"
+            )
         except Exception as e:
-            st.error(f"Error loading file requirements: {str(e)}")
+            st.error(f"❌ **Error loading file requirements:** {str(e)}")
+            st.info(
+                "ℹ️ This may be due to:\n"
+                "- Missing or corrupted mapping CSV file\n"
+                "- Invalid CSV format\n"
+                "- Missing required columns (parameter, csv_file)\n"
+                f"- File path: `{mapping_path}`"
+            )
 
     # Validation button
     st.markdown("---")
@@ -1035,6 +1074,15 @@ with tab3:
     mapping_path = app_dir / "Global_Parameter_Mapping_Extraction_only_CORRECTED.csv"
     mapping_exists = mapping_path.exists()
 
+    # Add debugging for Streamlit Cloud
+    if not mapping_exists:
+        st.error(
+            f"❌ **Mapping CSV file not found!**\n\n"
+            f"Expected location: `{mapping_path}`\n\n"
+            f"App directory: `{app_dir}`\n\n"
+            f"Files in app directory: {list(app_dir.glob('*.csv'))}"
+        )
+
     # Use dynamic validation to check if required files are uploaded
     all_files_uploaded = False
     if len(st.session_state.plot_types) > 0 and mapping_exists:
@@ -1043,37 +1091,54 @@ with tab3:
             file_requirements = get_required_files_from_mapping(
                 mapping_path, list(st.session_state.plot_types)
             )
-            parameter_sources = file_requirements["parameter_sources"]
 
-            # Check if location is uploaded (always required)
-            loc_uploaded = st.session_state.uploaded_files.get("location") is not None
+            # Defensive check for required keys
+            if "parameter_sources" not in file_requirements:
+                st.error(
+                    "❌ **Error:** Mapping CSV structure is incomplete. "
+                    "Missing 'parameter_sources' data."
+                )
+                all_files_uploaded = False
+            else:
+                parameter_sources = file_requirements["parameter_sources"]
 
-            # Check if at least one source file per parameter is uploaded
-            uploaded_filenames = {
-                normalize_filename(f.name): key
-                for key, f in st.session_state.uploaded_files.items()
-                if f is not None and key != "location"
-            }
+                # Check if location is uploaded (always required)
+                loc_uploaded = (
+                    st.session_state.uploaded_files.get("location") is not None
+                )
 
-            # Check each parameter has at least one source file
-            has_all_parameters = True
-            for param, sources in parameter_sources.items():
-                # Check if any source file for this parameter is uploaded
-                param_has_source = False
-                for source in sources:
-                    csv_file = source["csv_file"]
-                    normalized_csv = normalize_filename(csv_file)
-                    if normalized_csv in uploaded_filenames:
-                        param_has_source = True
+                # Check if at least one source file per parameter is uploaded
+                uploaded_filenames = {
+                    normalize_filename(f.name): key
+                    for key, f in st.session_state.uploaded_files.items()
+                    if f is not None and key != "location"
+                }
+
+                # Check each parameter has at least one source file
+                has_all_parameters = True
+                for param, sources in parameter_sources.items():
+                    # Check if any source file for this parameter is uploaded
+                    param_has_source = False
+                    for source in sources:
+                        csv_file = source["csv_file"]
+                        normalized_csv = normalize_filename(csv_file)
+                        if normalized_csv in uploaded_filenames:
+                            param_has_source = True
+                            break
+
+                    if not param_has_source:
+                        has_all_parameters = False
                         break
 
-                if not param_has_source:
-                    has_all_parameters = False
-                    break
-
-            all_files_uploaded = loc_uploaded and has_all_parameters
+                all_files_uploaded = loc_uploaded and has_all_parameters
+        except FileNotFoundError as e:
+            st.error(f"❌ **File Not Found:** {str(e)}")
+            all_files_uploaded = False
+        except ValueError as e:
+            st.error(f"❌ **Mapping CSV Error:** {str(e)}")
+            all_files_uploaded = False
         except Exception as e:
-            st.error(f"Error checking file requirements: {str(e)}")
+            st.error(f"❌ **Error checking file requirements:** {str(e)}")
             all_files_uploaded = False
 
     if len(st.session_state.plot_types) == 0:
