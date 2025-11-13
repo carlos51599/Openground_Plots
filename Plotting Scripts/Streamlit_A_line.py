@@ -5055,9 +5055,19 @@ def generate_aline_plots(
         CONFIG["investigation_tracking"]["location_details_csv"] = str(
             input_files["location"]
         )
-        CONFIG["parameter"]["csv_source_folder"] = str(
-            input_files["classification"].parent
-        )
+
+        # Find CSV source folder from first data file (not mapping/location)
+        csv_source_folder = None
+        for key, file_path in input_files.items():
+            if key not in ["mapping", "location"]:
+                csv_source_folder = str(file_path.parent)
+                break
+
+        if csv_source_folder is None:
+            # Fallback to output directory if no data files found
+            csv_source_folder = str(output_dir)
+
+        CONFIG["parameter"]["csv_source_folder"] = csv_source_folder
         CONFIG["parameter"]["output_base_folder"] = str(output_dir)
 
         parameter_name = CONFIG["parameter"]["name"]
@@ -5068,7 +5078,15 @@ def generate_aline_plots(
         logger.info(f"Parameter: {parameter_name}")
         logger.info(f"Mapping CSV: {input_files['mapping']}")
         logger.info(f"Location CSV: {input_files['location']}")
-        logger.info(f"Classification CSV: {input_files['classification']}")
+
+        # Log all data files
+        data_files = [
+            (key, path)
+            for key, path in input_files.items()
+            if key not in ["mapping", "location"]
+        ]
+        for key, path in data_files:
+            logger.info(f"Data CSV ({key}): {path}")
         logger.info(f"Output Directory: {output_dir}")
         logger.info("")
 
@@ -5095,8 +5113,25 @@ def generate_aline_plots(
         logger.info("")
 
         # === PHASE 2: CSV DATA LOADING ===
-        # Create a temporary CSV data dict with just the classification file
-        csv_files = [input_files["classification"]]
+        # Collect all data CSV files (exclude mapping and location)
+        csv_files = [
+            file_path
+            for key, file_path in input_files.items()
+            if key not in ["mapping", "location"]
+        ]
+
+        if not csv_files:
+            error_msg = "No data CSV files provided in input_files"
+            logger.error(f"❌ {error_msg}")
+            return {
+                "success": False,
+                "error": error_msg,
+                "plots_generated": 0,
+                "formations_processed": [],
+                "parameter_name": parameter_name,
+                "output_folder": output_dir,
+            }
+
         csv_data_dict = load_csv_data(csv_files)
 
         if not csv_data_dict:

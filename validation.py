@@ -2,16 +2,187 @@
 MODULE: validation.py
 
 RESPONSIBILITY:
-    Validates CSV files for geotechnical processing.
+    Validates CSV files for geotechnical processing and determines
+    required files dynamically from mapping CSV.
 
 AI NAVIGATION MARKERS:
-    Entry: validate_csv_files()
+    Entry: validate_csv_files(), get_required_files_from_mapping()
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Set
 from pathlib import Path
 import pandas as pd
 import io
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# ═════ PLOT TYPE PARAMETER MAPPING ═════
+# ═════════════════════════════════════════════════════════════════════════
+
+# Define which parameters are required for each plot type
+PLOT_TYPE_PARAMETERS: Dict[str, List[str]] = {
+    "aline": ["LiquidLimit", "PlasticityIndex"],
+    "strength": ["UndrainedShearStrength"],
+}
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# ═════ DYNAMIC FILE REQUIREMENT FUNCTIONS ═════
+# ═════════════════════════════════════════════════════════════════════════
+
+
+def get_required_files_from_mapping(
+    mapping_path: Path, plot_types: List[str]
+) -> Dict[str, Set[str]]:
+    """
+    Extract required CSV files from mapping CSV based on plot types.
+
+    Args:
+        mapping_path: Path to the mapping CSV file
+        plot_types: List of plot types (e.g., ["aline"], ["strength"])
+
+    Returns:
+        Dictionary with keys:
+        - "required_files": Set of required CSV filenames
+        - "required_parameters": Set of required parameter names
+    """
+    if not mapping_path.exists():
+        raise FileNotFoundError(f"Mapping CSV not found: {mapping_path}")
+
+    # Read mapping CSV
+    mapping_df = pd.read_csv(mapping_path)
+
+    # Collect all required parameters for selected plot types
+    required_params: Set[str] = set()
+    for plot_type in plot_types:
+        if plot_type in PLOT_TYPE_PARAMETERS:
+            required_params.update(PLOT_TYPE_PARAMETERS[plot_type])
+
+    # Find all CSV files that contain the required parameters
+    required_files: Set[str] = set()
+    for param in required_params:
+        param_rows = mapping_df[mapping_df["parameter"] == param]
+        if not param_rows.empty:
+            # Add all CSV files for this parameter
+            csv_files = param_rows["csv_file"].dropna().unique()
+            required_files.update(csv_files)
+
+    return {
+        "required_files": required_files,
+        "required_parameters": required_params,
+    }
+
+
+def normalize_filename(filename: str) -> str:
+    """
+    Normalize CSV filename for comparison (case-insensitive, no extension).
+
+    Args:
+        filename: Original filename
+
+    Returns:
+        Normalized filename (lowercase, no .csv extension)
+    """
+    return filename.lower().replace(".csv", "").strip()
+
+
+def get_file_upload_label(filename: str) -> str:
+    """
+    Generate user-friendly label for file upload widget.
+
+    Args:
+        filename: CSV filename from mapping
+
+    Returns:
+        User-friendly label (removes ' by Geology.csv' suffix)
+    """
+    # Remove common suffixes for cleaner display
+    label = filename.replace(" by Geology.csv", "").replace(".csv", "")
+    return label
+
+
+def map_uploaded_files_to_parameters(
+    uploaded_files: Dict[str, Path],
+    mapping_path: Path,
+    plot_types: List[str],
+) -> Dict[str, List[Path]]:
+    """
+    Map uploaded files to parameters based on mapping CSV.
+
+    Reads the mapping CSV to determine which uploaded files contain
+    which parameters required for the selected plot types.
+
+    Args:
+        uploaded_files: Dict mapping normalized filename keys to file paths
+        mapping_path: Path to the mapping CSV file
+        plot_types: List of plot types (e.g., ["aline"], ["strength"])
+
+    Returns:
+        Dictionary mapping parameter names to list of file paths that contain them.
+        Example: {"LiquidLimit": [Path("classification.csv")],
+                  "PlasticityIndex": [Path("classification.csv")]}
+    """
+    if not mapping_path.exists():
+        raise FileNotFoundError(f"Mapping CSV not found: {mapping_path}")
+
+    # Read mapping CSV
+    mapping_df = pd.read_csv(mapping_path)
+
+    # Collect all required parameters for selected plot types
+    required_params: Set[str] = set()
+    for plot_type in plot_types:
+        if plot_type in PLOT_TYPE_PARAMETERS:
+            required_params.update(PLOT_TYPE_PARAMETERS[plot_type])
+
+    # Build parameter to files mapping
+    param_to_files: Dict[str, List[Path]] = {}
+
+    for param in required_params:
+        # Find all CSV files that contain this parameter
+        param_rows = mapping_df[mapping_df["parameter"] == param]
+
+        if param_rows.empty:
+            continue
+
+        csv_files = param_rows["csv_file"].dropna().unique()
+
+        # Match CSV files to uploaded files
+        matching_files: List[Path] = []
+        for csv_filename in csv_files:
+            normalized_csv = normalize_filename(csv_filename)
+            matching_file = _find_matching_uploaded_file(normalized_csv, uploaded_files)
+            if matching_file:
+                matching_files.append(matching_file)
+
+        if matching_files:
+            param_to_files[param] = matching_files
+
+    return param_to_files
+
+
+def _find_matching_uploaded_file(
+    normalized_csv: str, uploaded_files: Dict[str, Path]
+) -> Path | None:
+    """
+    Find uploaded file matching normalized CSV name.
+
+    Args:
+        normalized_csv: Normalized CSV filename
+        uploaded_files: Dict of uploaded files
+
+    Returns:
+        Matching file path or None
+    """
+    for upload_key, file_path in uploaded_files.items():
+        # Skip non-data files
+        if upload_key in ["location", "mapping"]:
+            continue
+
+        # Check if normalized names match
+        if upload_key == normalized_csv:
+            return file_path
+
+    return None
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -19,50 +190,24 @@ import io
 # ═════════════════════════════════════════════════════════════════════════
 
 
-def validate_csv_files(
-    files: Dict[str, Any], plot_type: str = "aline"
-) -> Dict[str, Any]:
+def _validate_mapping_parameters(
+    mapping_path: Path, required_parameters: Set[str], plot_types: List[str]
+) -> List[str]:
     """
-    Validate uploaded CSV files for geotechnical processing.
+    Validate that required parameters exist in mapping CSV.
 
     Args:
-        files: Dictionary of uploaded file objects
-        plot_type: Type of plot ("aline" or "strength")
+        mapping_path: Path to mapping CSV
+        required_parameters: Set of parameter names to check
+        plot_types: List of plot types being validated
 
     Returns:
-        Dictionary with validation results
-        {"is_valid": bool, "errors": List[str], "warnings": List[str]}
+        List of error messages (empty if valid)
     """
     errors: List[str] = []
-    warnings: List[str] = []
 
-    # Check if all required files are present based on plot type
-    if plot_type == "aline":
-        required_files = ["mapping", "location", "classification"]
-    else:
-        # For strength plots, need mapping, location, and at least one test file
-        required_files = ["mapping", "location"]
-
-    missing_files = [f for f in required_files if not files.get(f)]
-
-    if missing_files:
-        errors.append(f"Missing required files: {', '.join(missing_files)}")
-        return {"is_valid": False, "errors": errors, "warnings": warnings}
-
-    # For strength plots, verify at least one test data file is present
-    if plot_type == "strength":
-        test_files = [
-            k for k in files.keys() if k not in ["mapping", "location"] and files[k]
-        ]
-        if not test_files:
-            errors.append(
-                "At least one test data CSV file is required for strength plots"
-            )
-            return {"is_valid": False, "errors": errors, "warnings": warnings}
-
-    # Validate mapping CSV
     try:
-        mapping_df = pd.read_csv(io.BytesIO(files["mapping"].getvalue()))
+        mapping_df = pd.read_csv(mapping_path)
         # Check for parameter column (case insensitive)
         param_col = None
         for col in mapping_df.columns:
@@ -73,27 +218,37 @@ def validate_csv_files(
         if param_col is None:
             errors.append("Mapping CSV missing 'parameter' column")
         else:
-            if plot_type == "aline":
-                # Check if LiquidLimit and PlasticityIndex are mapped
-                params = mapping_df[param_col].tolist()
-                if "LiquidLimit" not in params:
-                    errors.append("Mapping CSV missing 'LiquidLimit' parameter")
-                if "PlasticityIndex" not in params:
-                    errors.append("Mapping CSV missing 'PlasticityIndex' parameter")
-            else:
-                # For strength plots, check for UndrainedShearStrength
-                params = mapping_df[param_col].tolist()
-                if "UndrainedShearStrength" not in params:
+            params = mapping_df[param_col].tolist()
+
+            # Check if required parameters exist in mapping
+            for required_param in required_parameters:
+                if required_param not in params:
                     errors.append(
-                        "Mapping CSV missing 'UndrainedShearStrength' parameter"
+                        f"Mapping CSV missing '{required_param}' parameter "
+                        f"(required for {', '.join(plot_types)} plots)"
                     )
 
     except Exception as e:
         errors.append(f"Error reading mapping CSV: {str(e)}")
 
-    # Validate location CSV
+    return errors
+
+
+def _validate_location_csv(location_file: Any) -> tuple[List[str], List[str]]:
+    """
+    Validate Location Details CSV structure.
+
+    Args:
+        location_file: Uploaded location file object
+
+    Returns:
+        Tuple of (errors, warnings) lists
+    """
+    errors: List[str] = []
+    warnings: List[str] = []
+
     try:
-        location_df = pd.read_csv(io.BytesIO(files["location"].getvalue()))
+        location_df = pd.read_csv(io.BytesIO(location_file.getvalue()))
         has_location_id = any(
             col in location_df.columns for col in ["LocationID", "Location ID"]
         )
@@ -103,60 +258,119 @@ def validate_csv_files(
             errors.append("Location CSV missing 'LocationID' or 'Location ID' column")
         if not has_investigation:
             warnings.append(
-                "Location CSV missing 'Investigation' column - will use default investigation name"
+                "Location CSV missing 'Investigation' column - "
+                "will use default investigation name"
             )
 
     except Exception as e:
         errors.append(f"Error reading location CSV: {str(e)}")
 
-    # Validate classification CSV (A-line only)
-    if plot_type == "aline":
-        try:
-            classification_df = pd.read_csv(
-                io.BytesIO(files["classification"].getvalue())
-            )
+    return errors, warnings
 
-            # Check for geology and depth columns
-            has_geology = any(
-                col in classification_df.columns
-                for col in [
-                    "GeologyCode",
-                    "Geology Code",
-                    "GeologyCodeDescription",
-                    "Geology Code Description",
-                ]
-            )
-            has_depth = any(
-                col in classification_df.columns
-                for col in ["DepthTop", "SampleTop", "Test Depth", "Top Depth"]
-            )
 
-            if not has_geology:
-                errors.append("Classification CSV missing geology columns")
-            if not has_depth:
-                errors.append("Classification CSV missing depth columns")
+def _check_uploaded_files(
+    files: Dict[str, Any], required_csv_files: Set[str]
+) -> tuple[List[str], List[str]]:
+    """
+    Check if required files are uploaded.
 
-            # Check for parameter columns (should have at least one of LL or PI)
-            has_ll = (
-                "LiquidLimit" in classification_df.columns
-                or "Liquid Limit" in classification_df.columns
-            )
-            has_pi = (
-                "PlasticityIndex" in classification_df.columns
-                or "Plasticity Index" in classification_df.columns
-            )
+    Args:
+        files: Dictionary of uploaded file objects
+        required_csv_files: Set of required CSV filenames
 
-            if not (has_ll or has_pi):
-                errors.append(
-                    "Classification CSV missing both 'LiquidLimit' and 'PlasticityIndex' columns"
-                )
-            elif not has_ll:
-                warnings.append("Classification CSV missing 'LiquidLimit' column")
-            elif not has_pi:
-                warnings.append("Classification CSV missing 'PlasticityIndex' column")
+    Returns:
+        Tuple of (errors, warnings) lists
+    """
+    errors: List[str] = []
+    warnings: List[str] = []
 
-        except Exception as e:
-            errors.append(f"Error reading classification CSV: {str(e)}")
+    # Normalize uploaded filenames for comparison
+    uploaded_filenames = {
+        normalize_filename(f.name): key
+        for key, f in files.items()
+        if f is not None and key != "location"
+    }
+
+    # Check for missing required files
+    missing_files = []
+    for required_file in required_csv_files:
+        normalized_required = normalize_filename(required_file)
+        if normalized_required not in uploaded_filenames:
+            missing_files.append(required_file)
+
+    if missing_files:
+        errors.append(
+            f"Missing required CSV files for selected plot types: "
+            f"{', '.join(missing_files)}"
+        )
+        warnings.append(
+            "Note: At least one file containing the required parameters "
+            "must be uploaded. Multiple files may contain the same parameter "
+            "with different priority ranks."
+        )
+
+    return errors, warnings
+
+
+def validate_csv_files(
+    files: Dict[str, Any], plot_types: List[str] = None, mapping_path: Path = None
+) -> Dict[str, Any]:
+    """
+    Validate uploaded CSV files for geotechnical processing.
+
+    Args:
+        files: Dictionary of uploaded file objects
+        plot_types: List of plot types to validate
+                   (e.g., ["aline"], ["strength"], or ["aline", "strength"])
+                   If None, defaults to ["aline"]
+        mapping_path: Path to mapping CSV file (if None, uses default location)
+
+    Returns:
+        Dictionary with validation results
+        {"is_valid": bool, "errors": List[str], "warnings": List[str]}
+    """
+    if plot_types is None:
+        plot_types = ["aline"]
+
+    errors: List[str] = []
+    warnings: List[str] = []
+
+    # Set default mapping path if not provided
+    if mapping_path is None:
+        mapping_path = (
+            Path(__file__).parent
+            / "Global_Parameter_Mapping_Extraction_only_CORRECTED.csv"
+        )
+
+    # Location Details is always required (hardcoded)
+    if not files.get("location"):
+        errors.append("Missing required file: Location Details CSV")
+        return {"is_valid": False, "errors": errors, "warnings": warnings}
+
+    # Get required files dynamically from mapping CSV
+    try:
+        file_requirements = get_required_files_from_mapping(mapping_path, plot_types)
+        required_csv_files = file_requirements["required_files"]
+        required_parameters = file_requirements["required_parameters"]
+    except Exception as e:
+        errors.append(f"Error reading mapping CSV: {str(e)}")
+        return {"is_valid": False, "errors": errors, "warnings": warnings}
+
+    # Check if required files are uploaded
+    upload_errors, upload_warnings = _check_uploaded_files(files, required_csv_files)
+    errors.extend(upload_errors)
+    warnings.extend(upload_warnings)
+
+    # Validate mapping CSV parameters
+    mapping_errors = _validate_mapping_parameters(
+        mapping_path, required_parameters, plot_types
+    )
+    errors.extend(mapping_errors)
+
+    # Validate location CSV
+    loc_errors, loc_warnings = _validate_location_csv(files["location"])
+    errors.extend(loc_errors)
+    warnings.extend(loc_warnings)
 
     return {"is_valid": len(errors) == 0, "errors": errors, "warnings": warnings}
 

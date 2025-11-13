@@ -29,38 +29,10 @@ from validation import (
     get_required_files_from_mapping,
     get_file_upload_label,
     normalize_filename,
-    map_uploaded_files_to_parameters,
 )
 from zip_utils import create_zip_archive
 from Streamlit_A_line import generate_aline_plots
 from Streamlit_UndrainedShearStrength import generate_strength_plots
-
-
-# ═════════════════════════════════════════════════════════════════════════
-# ═════ UI COLOR CONFIGURATION ═════
-# ═════════════════════════════════════════════════════════════════════════
-
-UI_CONFIG = {
-    "primary_color": "#642DE6AC",  # Purple - used for selected buttons, active states
-    "primary_dark": "#642DE6AC",  # Darker purple for hover states
-}
-
-
-def hex_to_rgb(hex_color: str) -> str:
-    """
-    Convert hex color to RGB string for use in rgba() CSS.
-
-    Args:
-        hex_color: Hex color string (e.g., "#8B5CF6")
-
-    Returns:
-        RGB string (e.g., "139, 92, 246")
-    """
-    hex_color = hex_color.lstrip("#")
-    r = int(hex_color[0:2], 16)
-    g = int(hex_color[2:4], 16)
-    b = int(hex_color[4:6], 16)
-    return f"{r}, {g}, {b}"
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -76,8 +48,8 @@ st.set_page_config(
 # ═════════════════════════════════════════════════════════════════════════
 
 # Load and encode background image
-background_path = app_dir / "assets" / "BackgroundWhite.jpg"
-logo_path = app_dir / "assets" / "BinniesLogoDark.png"
+background_path = app_dir / "assets" / "BackgroundBlue.jpg"
+logo_path = app_dir / "assets" / "BinniesLogo.png"
 
 if background_path.exists():
     import base64
@@ -85,11 +57,7 @@ if background_path.exists():
     with open(background_path, "rb") as f:
         bg_data = base64.b64encode(f.read()).decode()
 
-    # Compute RGB values for CSS
-    primary_color_rgb = hex_to_rgb(UI_CONFIG["primary_color"])
-    primary_dark_rgb = hex_to_rgb(UI_CONFIG["primary_dark"])
-
-    # Add custom CSS for light theme glassmorphism design
+    # Add custom CSS for glassmorphism design
     st.markdown(
         f"""
         <style>
@@ -106,43 +74,44 @@ if background_path.exists():
         /* Styles the Streamlit top toolbar/header (contains hamburger menu, deploy button, etc.) */
         /* The header uses data-testid="stHeader" and can be customized with CSS */
         header[data-testid="stHeader"] {{
-            background: rgba(255, 255, 255, 0.85) !important;
+            background: rgba(38, 131, 160, 0.3) !important;
             backdrop-filter: blur(20px) saturate(180%) !important;
             -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.1) !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.15) !important;
         }}
         
         /* Header toolbar buttons and icons */
         header[data-testid="stHeader"] button {{
-            color: #1f2937 !important;
+            color: #ffffff !important;
         }}
         
         header[data-testid="stHeader"] svg {{
-            fill: #1f2937 !important;
+            fill: #ffffff !important;
         }}
         
         /* Glassmorphism effect for main container */
         .main .block-container {{
-            background: rgba(255, 255, 255, 0.75);
+            background: rgba(255, 255, 255, 0.08);
             backdrop-filter: blur(20px) saturate(180%);
             -webkit-backdrop-filter: blur(20px) saturate(180%);
             border-radius: 20px;
-            border: 1px solid rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.15);
             padding: 2.5rem;
             margin-top: 1rem;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.15);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
         }}
         
-        /* Make all text dark for light background */
+        /* Make all text white/light for dark background */
         .stApp {{
-            color: #1f2937;
+            color: #ffffff;
         }}
         
-        /* Headers styling - dark text with subtle shadow */
+        /* Headers styling - bright white with glow */
         h1, h2, h3, h4, h5, h6 {{
-            color: #111827 !important;
+            color: #ffffff !important;
             font-weight: 700 !important;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.3), 
+                         2px 2px 8px rgba(0,0,0,0.5);
         }}
         
         /* Main title styling */
@@ -152,44 +121,44 @@ if background_path.exists():
             letter-spacing: 0.5px;
         }}
         
-        /* Radio buttons and checkboxes - light glassmorphic cards */
+        /* Radio buttons and checkboxes - glassmorphic cards */
         .stRadio, .stCheckbox {{
-            background: rgba(255, 255, 255, 0.6);
+            background: rgba(255, 255, 255, 0.05);
             backdrop-filter: blur(10px);
             border-radius: 12px;
             padding: 1rem;
-            border: 1px solid rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }}
         
         .stRadio label, .stCheckbox label {{
-            color: #1f2937 !important;
+            color: #ffffff !important;
             font-weight: 500 !important;
         }}
         
         /* All paragraph text */
         p, span, div {{
-            color: #1f2937 !important;
+            color: #ffffff !important;
         }}
         
-        /* Button styling - uses UI_CONFIG colors */
+        /* Button styling - glass button with teal/green glow */
         .stButton button {{
-            background: linear-gradient(135deg, {UI_CONFIG['primary_color']}, {UI_CONFIG['primary_dark']}) !important;
+            background: linear-gradient(135deg, rgba(52, 161, 119, 0.9), rgba(42, 141, 99, 0.9)) !important;
             color: #ffffff !important;
-            border: 2px solid {UI_CONFIG['primary_color']} !important;
+            border: 2px solid rgba(255, 255, 255, 0.3) !important;
             font-weight: 700 !important;
             border-radius: 12px !important;
             backdrop-filter: blur(10px) !important;
-            box-shadow: 0 4px 15px rgba({primary_color_rgb}, 0.3),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+            box-shadow: 0 4px 15px rgba(52, 161, 119, 0.4),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
             transition: all 0.3s ease !important;
             min-height: 3rem !important;
             font-size: 1.1rem !important;
         }}
         
         .stButton button:hover {{
-            background: linear-gradient(135deg, {UI_CONFIG['primary_dark']}, {UI_CONFIG['primary_dark']}) !important;
-            box-shadow: 0 6px 20px rgba({primary_color_rgb}, 0.5),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+            background: linear-gradient(135deg, rgba(42, 141, 99, 1), rgba(52, 161, 119, 1)) !important;
+            box-shadow: 0 6px 20px rgba(52, 161, 119, 0.6),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.4) !important;
             transform: translateY(-2px) !important;
         }}
         
@@ -200,125 +169,117 @@ if background_path.exists():
             padding: 1.5rem !important;
         }}
         
-        /* Primary button (selected state) - uses UI_CONFIG colors */
+        /* Primary button (selected state) - bright teal with glow */
         button[data-baseweb="button"][kind="primary"],
         button[data-testid="stBaseButton-primary"] {{
-            background: linear-gradient(135deg, {UI_CONFIG['primary_color']}, {UI_CONFIG['primary_dark']}) !important;
-            color: #ffffff !important;
-            box-shadow: 0 8px 25px rgba({primary_color_rgb}, 0.4),
-                        inset 0 2px 0 rgba(255, 255, 255, 0.3),
-                        0 0 30px rgba({primary_color_rgb}, 0.2) !important;
-            border: 3px solid {UI_CONFIG['primary_color']} !important;
+            background: linear-gradient(135deg, rgba(52, 161, 119, 1), rgba(42, 141, 99, 1)) !important;
+            box-shadow: 0 8px 25px rgba(52, 161, 119, 0.6),
+                        inset 0 2px 0 rgba(255, 255, 255, 0.4),
+                        0 0 30px rgba(52, 161, 119, 0.3) !important;
+            border: 3px solid rgba(255, 255, 255, 0.5) !important;
             transform: scale(1.02) !important;
         }}
         
-        /* Target text inside primary button to ensure white color */
-        button[data-testid="stBaseButton-primary"] p,
-        button[data-testid="stBaseButton-primary"] span,
-        button[data-testid="stBaseButton-primary"] div {{
-            color: #ffffff !important;
-        }}
-        
-        /* Secondary button (unselected state) - light gray with dark text */
+        /* Secondary button (unselected state) - muted glass */
         button[data-baseweb="button"][kind="secondary"],
         button[data-testid="stBaseButton-secondary"] {{
-            background: rgba(243, 244, 246, 0.9) !important;
-            color: #6b7280 !important;
-            border: 2px solid rgba(209, 213, 219, 1) !important;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+            background: rgba(255, 255, 255, 0.1) !important;
+            color: #ffffff !important;
+            border: 2px solid rgba(255, 255, 255, 0.2) !important;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2) !important;
             backdrop-filter: blur(10px) !important;
         }}
         
         /* Target text inside secondary button */
         button[data-testid="stBaseButton-secondary"] p {{
-            color: #6b7280 !important;
+            color: rgba(255, 255, 255, 0.6) !important;
         }}
         
         button[data-baseweb="button"][kind="secondary"]:hover,
         button[data-testid="stBaseButton-secondary"]:hover {{
-            background: rgba(229, 231, 235, 1) !important;
-            border-color: rgba({primary_color_rgb}, 0.5) !important;
-            box-shadow: 0 4px 12px rgba({primary_color_rgb}, 0.2) !important;
+            background: rgba(255, 255, 255, 0.15) !important;
+            border-color: rgba(52, 161, 119, 0.4) !important;
+            box-shadow: 0 6px 20px rgba(52, 161, 119, 0.3) !important;
         }}
         
         /* Hover text brightness */
         button[data-testid="stBaseButton-secondary"]:hover p {{
-            color: #374151 !important;
+            color: rgba(255, 255, 255, 0.8) !important;
         }}
         
-        /* File uploader - light glass card */
+        /* File uploader - glass card */
         .stFileUploader {{
-            background: rgba(255, 255, 255, 0.7);
+            background: rgba(255, 255, 255, 0.06);
             backdrop-filter: blur(10px);
             border-radius: 15px;
             padding: 1.5rem;
-            border: 1px solid rgba(0, 0, 0, 0.1);
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
         }}
         
         .stFileUploader label {{
-            color: #1f2937 !important;
+            color: #ffffff !important;
             font-weight: 600 !important;
         }}
         
-        /* File uploader drop zone - light background with purple border */
+        /* File uploader drop zone - enhanced glass effect with dark background */
         .stFileUploader > div > div {{
-            background: rgba(249, 250, 251, 1) !important;
+            background: rgba(30, 58, 138, 1) !important;
             backdrop-filter: blur(15px) !important;
-            border: 2px dashed rgba({primary_color_rgb}, 0.6) !important;
+            border: 2px dashed rgba(52, 161, 119, 1) !important;
             border-radius: 12px !important;
             transition: all 0.3s ease !important;
         }}
         
         .stFileUploader > div > div:hover {{
-            background: rgba(243, 244, 246, 1) !important;
-            border-color: {UI_CONFIG['primary_color']} !important;
-            box-shadow: 0 0 20px rgba({primary_color_rgb}, 0.2) !important;
+            background: rgba(30, 58, 138, 1) !important;
+            border-color: rgba(52, 161, 119, 1) !important;
+            box-shadow: 0 0 20px rgba(52, 161, 119, 1) !important;
         }}
         
         /* File uploader drag active state */
         .stFileUploader [data-baseweb="file-uploader"] {{
-            background: rgba(249, 250, 251, 1) !important;
+            background: rgba(30, 58, 138, 1) !important;
             backdrop-filter: blur(15px) !important;
             border-radius: 12px !important;
         }}
         
-        /* File uploader text - dark for visibility on light background */
+        /* File uploader text - white for visibility */
         .stFileUploader [data-baseweb="file-uploader"] span {{
-            color: #1f2937 !important;
+            color: #ffffff !important;
             font-weight: 500 !important;
         }}
         
         .stFileUploader [data-baseweb="file-uploader"] small {{
-            color: #6b7280 !important;
+            color: rgba(255, 255, 255, 1) !important;
         }}
         
         .stFileUploader [data-baseweb="file-uploader"] p {{
-            color: #1f2937 !important;
+            color: #ffffff !important;
         }}
         
-        /* File uploader section text - dark for visibility */
+        /* File uploader section text - white for visibility */
         section[data-testid="stFileUploader"] span {{
-            color: #1f2937 !important;
+            color: #ffffff !important;
         }}
         
         section[data-testid="stFileUploader"] small {{
-            color: #6b7280 !important;
+            color: rgba(255, 255, 255, 1) !important;
         }}
         
-        /* File uploader button - purple color scheme */
+        /* File uploader button - teal color scheme */
         .stFileUploader [data-baseweb="file-uploader"] button {{
-            background: linear-gradient(135deg, {UI_CONFIG['primary_color']}, {UI_CONFIG['primary_dark']}) !important;
+            background: linear-gradient(135deg, rgba(52, 161, 119, 1), rgba(42, 141, 99, 1)) !important;
             color: #ffffff !important;
-            border: 1px solid {UI_CONFIG['primary_color']} !important;
+            border: 1px solid rgba(255, 255, 255, 1) !important;
             border-radius: 8px !important;
             backdrop-filter: blur(10px) !important;
             font-weight: 600 !important;
         }}
         
         .stFileUploader [data-baseweb="file-uploader"] button:hover {{
-            background: linear-gradient(135deg, {UI_CONFIG['primary_dark']}, {UI_CONFIG['primary_dark']}) !important;
-            box-shadow: 0 4px 12px rgba({primary_color_rgb}, 0.3) !important;
+            background: linear-gradient(135deg, rgba(42, 141, 99, 1), rgba(52, 161, 119, 1)) !important;
+            box-shadow: 0 4px 12px rgba(52, 161, 119, 1) !important;
         }}
         
         /* Additional file uploader targeting - catch all elements */
@@ -331,36 +292,36 @@ if background_path.exists():
         }}
         
         [data-testid="stFileUploader"] [data-baseweb="file-uploader"] {{
-            background: rgba(249, 250, 251, 1) !important;
+            background: rgba(30, 58, 138, 1) !important;
         }}
         
         [data-testid="stFileUploader"] [data-baseweb="file-uploader"] > div {{
-            background: rgba(249, 250, 251, 1) !important;
+            background: rgba(30, 58, 138, 1) !important;
         }}
         
-        /* Catch any remaining backgrounds in file uploader */
+        /* Catch any remaining white backgrounds in file uploader */
         .stFileUploader div[style*="background"] {{
-            background: rgba(249, 250, 251, 1) !important;
+            background: rgba(30, 58, 138, 1) !important;
         }}
         
         /* Ultra-aggressive file uploader styling - override everything */
         section[data-testid="stFileUploader"] div {{
-            background-color: rgba(249, 250, 251, 1) !important;
+            background-color: rgba(30, 58, 138, 1) !important;
         }}
         
         section[data-testid="stFileUploader"] [data-baseweb="file-uploader"] {{
-            background-color: rgba(249, 250, 251, 1) !important;
-            border: 2px dashed rgba({primary_color_rgb}, 0.6) !important;
+            background-color: rgba(30, 58, 138, 1) !important;
+            border: 2px dashed rgba(52, 161, 119, 1) !important;
         }}
         
         section[data-testid="stFileUploader"] div[data-baseweb="file-uploader"] > div {{
-            background-color: rgba(249, 250, 251, 1) !important;
+            background-color: rgba(30, 58, 138, 1) !important;
         }}
         
         /* Override any inline background styles */
         section[data-testid="stFileUploader"] div[style*="background"] {{
-            background-color: rgba(249, 250, 251, 1) !important;
-            background: rgba(249, 250, 251, 1) !important;
+            background-color: rgba(30, 58, 138, 1) !important;
+            background: rgba(30, 58, 138, 1) !important;
         }}
         
         /* Text color in file uploader */
@@ -368,36 +329,36 @@ if background_path.exists():
         section[data-testid="stFileUploader"] p,
         section[data-testid="stFileUploader"] small,
         section[data-testid="stFileUploader"] div {{
-            color: #1f2937 !important;
+            color: #ffffff !important;
         }}
         
         /* Highest specificity - target by element and attributes */
         section.main section[data-testid="stFileUploader"] div[data-baseweb="file-uploader"] {{
-            background: rgba(249, 250, 251, 1) !important;
-            background-color: rgba(249, 250, 251, 1) !important;
+            background: rgba(30, 58, 138, 1) !important;
+            background-color: rgba(30, 58, 138, 1) !important;
         }}
         
-        /* Force override Streamlit's default background */
+        /* Force override Streamlit's default white background */
         .stApp section[data-testid="stFileUploader"] > div > div {{
-            background: rgba(249, 250, 251, 1) !important;
+            background: rgba(30, 58, 138, 1) !important;
         }}
         
         .stApp section[data-testid="stFileUploader"] [role="button"] {{
-            background: rgba(249, 250, 251, 1) !important;
+            background: rgba(30, 58, 138, 1) !important;
         }}
         
         /* Target the dropzone specifically */
         section[data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"],
         section[data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInput"] {{
-            background: rgba(249, 250, 251, 1) !important;
-            background-color: rgba(249, 250, 251, 1) !important;
+            background: rgba(30, 58, 138, 1) !important;
+            background-color: rgba(30, 58, 138, 1) !important;
         }}
         
         /* NEW: Target the ACTUAL dropzone section directly */
         section[data-testid="stFileUploaderDropzone"] {{
-            background: rgba(249, 250, 251, 1) !important;
-            background-color: rgba(249, 250, 251, 1) !important;
-            border: 2px dashed rgba({primary_color_rgb}, 0.6) !important;
+            background: rgba(172, 229, 255, 1) !important;
+            background-color: rgba(182, 232, 255, 1) !important;
+            border: 2px dashed rgba(52, 161, 119, 0) !important;
             border-radius: 12px !important;
         }}
         
@@ -410,33 +371,33 @@ if background_path.exists():
         section[data-testid="stFileUploaderDropzone"] span,
         section[data-testid="stFileUploaderDropzone"] small,
         section[data-testid="stFileUploaderDropzone"] div {{
-            color: #1f2937 !important;
+            color: #000000e5 !important;
         }}
         
         /* Target the Browse files button specifically */
         section[data-testid="stFileUploaderDropzone"] button[kind="secondary"] {{
-            background: linear-gradient(135deg, {UI_CONFIG['primary_color']}, {UI_CONFIG['primary_dark']}) !important;
+            background: linear-gradient(135deg, rgba(52, 161, 119, 1), rgba(42, 141, 99, 1)) !important;
             color: #ffffff !important;
-            border: 1px solid {UI_CONFIG['primary_color']} !important;
+            border: 1px solid rgba(255, 255, 255, 0) !important;
         }}
         
         section[data-testid="stFileUploaderDropzone"] button[kind="secondary"]:hover {{
-            background: linear-gradient(135deg, {UI_CONFIG['primary_dark']}, {UI_CONFIG['primary_dark']}) !important;
-            box-shadow: 0 4px 12px rgba({primary_color_rgb}, 0.3) !important;
+            background: linear-gradient(135deg, rgba(42, 141, 99, 1), rgba(52, 161, 119, 1)) !important;
+            box-shadow: 0 4px 12px rgba(52, 161, 119, 1) !important;
         }}
         
-        /* Tabs - light glass effect */
+        /* Tabs - liquid glass effect */
         .stTabs [data-baseweb="tab-list"] {{
-            background: rgba(255, 255, 255, 0.8);
+            background: rgba(255, 255, 255, 0.08);
             backdrop-filter: blur(15px);
             border-radius: 15px;
             padding: 0.5rem;
-            border: 1px solid rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.15);
             gap: 0.5rem;
         }}
         
         .stTabs [data-baseweb="tab"] {{
-            color: #4b5563 !important;
+            color: #ffffff !important;
             font-weight: 600 !important;
             border-radius: 10px !important;
             background: transparent !important;
@@ -445,44 +406,36 @@ if background_path.exists():
         }}
         
         .stTabs [data-baseweb="tab"]:hover {{
-            background: rgba(243, 244, 246, 1) !important;
-            color: #1f2937 !important;
+            background: rgba(255, 255, 255, 0.1) !important;
         }}
         
         .stTabs [aria-selected="true"] {{
-            background: linear-gradient(135deg, {UI_CONFIG['primary_color']}, {UI_CONFIG['primary_dark']}) !important;
+            background: linear-gradient(135deg, rgba(52, 161, 119, 0.9), rgba(42, 141, 99, 0.9)) !important;
             color: #ffffff !important;
-            box-shadow: 0 4px 12px rgba({primary_color_rgb}, 0.3) !important;
+            box-shadow: 0 4px 12px rgba(251, 191, 36, 0.4) !important;
         }}
         
-        /* Ensure text inside selected tab is white */
-        .stTabs [aria-selected="true"] p,
-        .stTabs [aria-selected="true"] span,
-        .stTabs [aria-selected="true"] div {{
-            color: #ffffff !important;
-        }}
-        
-        /* Metrics - light cards */
+        /* Metrics - glowing cards */
         [data-testid="stMetric"] {{
-            background: rgba(255, 255, 255, 0.8);
+            background: rgba(255, 255, 255, 0.08);
             backdrop-filter: blur(10px);
             border-radius: 12px;
             padding: 1rem;
-            border: 1px solid rgba(0, 0, 0, 0.1);
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
         }}
         
         [data-testid="stMetricValue"] {{
-            color: #059669 !important;
+            color: #fbbf24 !important;
             font-weight: 700 !important;
-            text-shadow: 0 2px 4px rgba(5, 150, 105, 0.2);
+            text-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
         }}
         
         [data-testid="stMetricLabel"] {{
-            color: #4b5563 !important;
+            color: rgba(255, 255, 255, 0.9) !important;
         }}
         
-        /* Logo styling - transparent with slight shadow */
+        /* Logo styling - transparent with glass effect */
         .logo-container {{
             position: fixed;
             top: 100px;
@@ -492,7 +445,7 @@ if background_path.exists():
             padding: 0px;
             border-radius: 0px;
             border: none;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            box-shadow: none;
         }}
         
         .logo-container img {{
@@ -500,149 +453,170 @@ if background_path.exists():
             background: transparent;
         }}
         
-        /* Success/Error/Warning messages - light theme with color */
+        /* Sidebar styling - glass panel */
+        [data-testid="stSidebar"] {{
+            background: rgba(255, 255, 255, 1) !important;
+            backdrop-filter: blur(20px) saturate(180%) !important;
+            -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+            border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
+        }}
+        
+        [data-testid="stSidebar"] > div:first-child {{
+            background: transparent !important;
+        }}
+        
+        [data-testid="stSidebar"] h1, 
+        [data-testid="stSidebar"] h2, 
+        [data-testid="stSidebar"] h3,
+        [data-testid="stSidebar"] p,
+        [data-testid="stSidebar"] span,
+        [data-testid="stSidebar"] div {{
+            color: #111111 !important;
+        }}
+        
+        /* Success/Error/Warning messages - glass cards with color */
         .stSuccess {{
-            background: rgba(209, 250, 229, 0.95) !important;
+            background: rgba(16, 185, 129, 0.85) !important;
             backdrop-filter: blur(10px) !important;
-            color: #065f46 !important;
+            color: white !important;
             border-radius: 12px !important;
-            border: 1px solid rgba(16, 185, 129, 0.3) !important;
-            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.2) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3) !important;
         }}
         
         .stError {{
-            background: rgba(254, 202, 202, 0.95) !important;
+            background: rgba(52, 161, 119, 0.767) !important;
             backdrop-filter: blur(10px) !important;
-            color: #991b1b !important;
+            color: white !important;
             border-radius: 12px !important;
-            border: 1px solid rgba(239, 68, 68, 0.3) !important;
-            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.2) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            box-shadow: 0 4px 15px rgba(52, 161, 119, 0.3) !important;
         }}
         
         .stWarning {{
-            background: rgba(254, 243, 199, 0.95) !important;
+            background: rgba(251, 191, 36, 0.85) !important;
             backdrop-filter: blur(10px) !important;
-            color: #92400e !important;
+            color: #1e3a8a !important;
             border-radius: 12px !important;
-            border: 1px solid rgba(251, 191, 36, 0.3) !important;
-            box-shadow: 0 4px 15px rgba(251, 191, 36, 0.2) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            box-shadow: 0 4px 15px rgba(251, 191, 36, 0.3) !important;
         }}
         
         .stInfo {{
-            background: rgba(219, 234, 254, 0.95) !important;
+            background: rgba(59, 130, 246, 0.85) !important;
             backdrop-filter: blur(10px) !important;
-            color: #1e40af !important;
+            color: #ffffff !important;
             border-radius: 12px !important;
-            border: 1px solid rgba(59, 130, 246, 0.3) !important;
-            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.2) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3) !important;
         }}
         
-        /* Slider - light glass track */
+        /* Slider - glass track */
         .stSlider {{
-            background: rgba(255, 255, 255, 0.7);
+            background: rgba(255, 255, 255, 0.05);
             backdrop-filter: blur(10px);
             border-radius: 12px;
             padding: 1rem;
-            border: 1px solid rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }}
         
         .stSlider label {{
-            color: #1f2937 !important;
+            color: #ffffff !important;
             font-weight: 500 !important;
         }}
         
-        /* Selectbox - light glass dropdown */
+        /* Selectbox - glass dropdown */
         .stSelectbox {{
-            background: rgba(255, 255, 255, 0.7);
+            background: rgba(255, 255, 255, 0.05);
             backdrop-filter: blur(10px);
             border-radius: 12px;
             padding: 1rem;
-            border: 1px solid rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }}
         
         .stSelectbox label {{
-            color: #1f2937 !important;
+            color: #ffffff !important;
             font-weight: 500 !important;
         }}
         
         /* Selectbox dropdown menu */
         .stSelectbox > div > div {{
-            background: rgba(255, 255, 255, 0.95) !important;
+            background: rgba(255, 99, 71, 0.5) !important;
             backdrop-filter: blur(15px) !important;
-            border: 1px solid rgba(0, 0, 0, 0.15) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
         }}
         
         .stSelectbox [data-baseweb="select"] {{
-            background: rgba(249, 250, 251, 1) !important;
+            background: rgba(255, 99, 71, 0.5) !important;
             backdrop-filter: blur(10px) !important;
-            border: 1px solid rgba(209, 213, 219, 1) !important;
+            border: 1px solid rgba(255, 255, 255, 0.3) !important;
         }}
         
         .stSelectbox [data-baseweb="select"] > div {{
-            color: #1f2937 !important;
+            color: #ffffff !important;
         }}
         
         /* Selectbox dropdown options */
         [role="option"] {{
-            color: #1f2937 !important;
-            background: rgba(255, 255, 255, 1) !important;
+            color: #ffffff !important;
+            background: rgba(255, 99, 71, 0.7) !important;
         }}
         
         [role="option"]:hover {{
-            background: rgba(243, 244, 246, 1) !important;
+            background: rgba(234, 176, 31, 0.9) !important;
         }}
         
-        /* Input fields - light glass */
+        /* Input fields - transparent glass */
         input, textarea {{
-            background: rgba(249, 250, 251, 1) !important;
+            background: rgba(255, 255, 255, 0.15) !important;
             backdrop-filter: blur(10px) !important;
-            color: #1f2937 !important;
-            border: 1px solid rgba(209, 213, 219, 1) !important;
+            color: #ffffff !important;
+            border: 1px solid rgba(255, 255, 255, 0.3) !important;
             border-radius: 10px !important;
-            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1) !important;
         }}
         
         input::placeholder, textarea::placeholder {{
-            color: #9ca3af !important;
+            color: rgba(255, 255, 255, 0.6) !important;
         }}
         
         /* Number input and text input specific styling */
         .stNumberInput input, .stTextInput input {{
-            background: rgba(249, 250, 251, 1) !important;
-            color: #1f2937 !important;
+            background: rgba(255, 255, 255, 0.15) !important;
+            color: #ffffff !important;
         }}
         
         /* Markdown text */
         .stMarkdown {{
-            color: #1f2937 !important;
+            color: #ffffff !important;
         }}
         
-        /* Expander - light glass accordion */
+        /* Expander - glass accordion */
         .streamlit-expanderHeader {{
-            background: rgba(255, 255, 255, 0.8) !important;
+            background: rgba(255, 255, 255, 0.08) !important;
             backdrop-filter: blur(10px) !important;
             border-radius: 12px !important;
-            border: 1px solid rgba(0, 0, 0, 0.1) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
         }}
         
-        /* Column dividers with subtle borders */
+        /* Column dividers with subtle glow */
         [data-testid="column"] {{
-            background: rgba(255, 255, 255, 0.5);
+            background: rgba(255, 255, 255, 0.03);
             backdrop-filter: blur(5px);
             border-radius: 12px;
             padding: 1rem;
-            border: 1px solid rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
         }}
         
-        /* Horizontal rule with subtle gradient */
+        /* Horizontal rule with glow */
         hr {{
             border: none;
             height: 1px;
             background: linear-gradient(90deg, 
                 transparent, 
-                rgba(0, 0, 0, 0.15), 
+                rgba(255, 255, 255, 0.3), 
                 transparent);
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
         }}
         </style>
         """,
@@ -690,40 +664,37 @@ if "plot_types" not in st.session_state:
 
 st.title("🏗️ Geotechnical Plotting Application")
 
-# Plot type selection with button-style pills
+# Plot type selection with checkboxes for multi-select
 st.markdown("### Select Plot Type(s):")
 st.markdown("*You can select multiple plot types to generate simultaneously*")
 
-# Create button columns
-col1, col2, col3 = st.columns([1, 1, 2])
+col1, col2 = st.columns(2)
 
 with col1:
-    if st.button(
-        "A-line (Atterberg Limits)",
-        key="btn_aline",
-        use_container_width=True,
-        type="primary" if "aline" in st.session_state.plot_types else "secondary",
-    ):
-        # Toggle selection
-        if "aline" in st.session_state.plot_types:
-            st.session_state.plot_types.discard("aline")
-        else:
-            st.session_state.plot_types.add("aline")
-        st.rerun()
+    aline_selected = st.checkbox(
+        "📊 A-line (Atterberg Limits)",
+        value="aline" in st.session_state.plot_types,
+        key="check_aline",
+    )
 
 with col2:
-    if st.button(
-        "Undrained Shear Strength",
-        key="btn_strength",
-        use_container_width=True,
-        type="primary" if "strength" in st.session_state.plot_types else "secondary",
-    ):
-        # Toggle selection
-        if "strength" in st.session_state.plot_types:
-            st.session_state.plot_types.discard("strength")
-        else:
-            st.session_state.plot_types.add("strength")
-        st.rerun()
+    strength_selected = st.checkbox(
+        "📈 Undrained Shear Strength",
+        value="strength" in st.session_state.plot_types,
+        key="check_strength",
+    )
+
+# Update plot_types set based on checkbox selections
+new_plot_types = set()
+if aline_selected:
+    new_plot_types.add("aline")
+if strength_selected:
+    new_plot_types.add("strength")
+
+# Update session state if selections changed
+if new_plot_types != st.session_state.plot_types:
+    st.session_state.plot_types = new_plot_types
+    st.rerun()
 
 # Description based on selected plot types
 if len(st.session_state.plot_types) == 0:
@@ -741,6 +712,69 @@ else:
     st.markdown(
         "Generate **both A-line and Undrained Shear Strength plots** from geotechnical data"
     )
+
+# Sidebar
+with st.sidebar:
+    st.header("About")
+
+    # Dynamic sidebar based on selected plot types
+    if len(st.session_state.plot_types) == 0:
+        st.warning("Please select at least one plot type")
+    elif len(st.session_state.plot_types) == 1:
+        if "aline" in st.session_state.plot_types:
+            st.markdown(
+                """
+            This tool generates A-line (plasticity) charts from geotechnical CSV data.
+            
+            **Features:**
+            - Investigation-based coloring
+            - Test type marker shapes
+            - Outlier detection and filtering
+            - Interactive HTML plots
+            - Excel exports with highlighting
+            """
+            )
+            st.markdown("---")
+            st.markdown("**Plot Type:** A-line (Atterberg)")
+        else:
+            st.markdown(
+                """
+            This tool generates Undrained Shear Strength vs Depth plots from geotechnical CSV data.
+            
+            **Features:**
+            - Investigation-based coloring
+            - Multiple test type support (SPT, CPT, Triaxial, etc.)
+            - Outlier detection and filtering
+            - Interactive HTML plots
+            - Manual outlier exclusion support
+            - Excel exports with highlighting
+            """
+            )
+            st.markdown("---")
+            st.markdown("**Plot Type:** Undrained Shear Strength")
+    else:
+        # Multiple plot types selected
+        st.markdown(
+            """
+        This tool generates both A-line and Undrained Shear Strength plots from geotechnical CSV data.
+        
+        **A-line Features:**
+        - Plasticity charts with classification boundaries
+        - Investigation-based coloring
+        
+        **Strength Features:**
+        - Multiple test type support
+        - CPT density analysis
+        - Manual outlier exclusion
+        
+        **Common Features:**
+        - Outlier detection and filtering
+        - Interactive HTML plots
+        - Excel exports with highlighting
+        """
+        )
+        st.markdown("---")
+        st.markdown("**Plot Types:** A-line + Undrained Shear Strength")
 
 # Main content tabs
 tab1, tab2, tab3 = st.tabs(["📁 Upload Files", "⚙️ Configuration", "📊 Results"])
@@ -765,73 +799,130 @@ with tab1:
     else:
         st.markdown("Upload the required CSV files for all selected plot types")
 
-    st.subheader("Required Files")
+    col1, col2 = st.columns(2)
 
-    # Location Details - Always required
-    st.session_state.uploaded_files["location"] = st.file_uploader(
-        "📍 **Location Details CSV**",
-        type=["csv"],
-        key="location_upload",
-        help="Location Details CSV with Location ID and Investigation columns",
-    )
+    with col1:
+        st.subheader("Required Files")
 
-    # Get dynamic file requirements from mapping CSV
-    mapping_path = app_dir / "Global_Parameter_Mapping_Extraction_only_CORRECTED.csv"
-
-    if len(st.session_state.plot_types) > 0 and mapping_path.exists():
-        try:
-            # Get required files from mapping
-            file_requirements = get_required_files_from_mapping(
-                mapping_path, list(st.session_state.plot_types)
-            )
-            required_files = sorted(file_requirements["required_files"])
-
-            # Display info about required files
-            st.markdown(
-                f"**Plot Specific Files ({len(required_files)} file types needed):**"
-            )
-            st.info("Upload at least one file containing the required parameters. ")
-
-            # Generate file uploaders dynamically
-            for csv_filename in required_files:
-                # Create normalized key for session state
-                normalized_key = normalize_filename(csv_filename)
-                upload_key = f"upload_{normalized_key}"
-
-                # Get user-friendly label
-                display_label = get_file_upload_label(csv_filename)
-
-                # Create file uploader with larger font
-                st.session_state.uploaded_files[normalized_key] = st.file_uploader(
-                    f"**{display_label}**",
-                    type=["csv"],
-                    key=upload_key,
-                    help=f"Upload {csv_filename}",
-                )
-
-        except Exception as e:
-            st.error(f"Error loading file requirements: {str(e)}")
-
-    # Validation button
-    st.markdown("---")
-    if st.button("🔍 Validate Files", type="primary"):
-        validation_result = validate_csv_files(
-            st.session_state.uploaded_files,
-            list(st.session_state.plot_types),
-            mapping_path,
+        # Location Details - Always required
+        st.session_state.uploaded_files["location"] = st.file_uploader(
+            "📍 Location Details CSV",
+            type=["csv"],
+            key="location_upload",
+            help="Location Details CSV with Location ID and Investigation columns",
         )
 
-        if validation_result["is_valid"]:
-            st.success("✅ All files validated successfully!")
-        else:
-            st.error("❌ Validation failed:")
-            for error in validation_result["errors"]:
-                st.error(f"  • {error}")
+        # Get dynamic file requirements from mapping CSV
+        mapping_path = (
+            app_dir / "Global_Parameter_Mapping_Extraction_only_CORRECTED.csv"
+        )
 
-        if validation_result["warnings"]:
-            st.warning("⚠️ Warnings:")
-            for warning in validation_result["warnings"]:
-                st.warning(f"  • {warning}")
+        if len(st.session_state.plot_types) > 0 and mapping_path.exists():
+            try:
+                # Get required files from mapping
+                file_requirements = get_required_files_from_mapping(
+                    mapping_path, list(st.session_state.plot_types)
+                )
+                required_files = sorted(file_requirements["required_files"])
+
+                # Display info about required files
+                st.markdown(
+                    f"**📋 Required Data Files ({len(required_files)} file types needed):**"
+                )
+                st.info(
+                    "Upload at least one file containing the required parameters. "
+                    "Multiple files may contain the same parameter with different priority ranks."
+                )
+
+                # Generate file uploaders dynamically
+                for csv_filename in required_files:
+                    # Create normalized key for session state
+                    normalized_key = normalize_filename(csv_filename)
+                    upload_key = f"upload_{normalized_key}"
+
+                    # Get user-friendly label
+                    display_label = get_file_upload_label(csv_filename)
+
+                    # Create file uploader
+                    st.session_state.uploaded_files[normalized_key] = st.file_uploader(
+                        display_label,
+                        type=["csv"],
+                        key=upload_key,
+                        help=f"Upload {csv_filename}",
+                    )
+
+            except Exception as e:
+                st.error(f"Error loading file requirements: {str(e)}")
+
+    with col2:
+        st.subheader("Upload Status")
+
+        # Show mapping file status (from repo)
+        if mapping_path.exists():
+            st.success(f"✅ Parameter Mapping: {mapping_path.name} (from repo)")
+        else:
+            st.error("❌ Parameter Mapping file not found in repo")
+
+        # Show location file status (always required)
+        loc_file = st.session_state.uploaded_files.get("location")
+        if loc_file:
+            st.success(f"✅ Location Details: {loc_file.name}")
+        else:
+            st.warning("⚠️ Location Details: Not uploaded (REQUIRED)")
+
+        # Show dynamically required files status
+        if len(st.session_state.plot_types) > 0 and mapping_path.exists():
+            try:
+                file_requirements = get_required_files_from_mapping(
+                    mapping_path, list(st.session_state.plot_types)
+                )
+                required_files = sorted(file_requirements["required_files"])
+
+                # Count uploaded required files
+                uploaded_count = 0
+                uploaded_details = []
+
+                for csv_filename in required_files:
+                    normalized_key = normalize_filename(csv_filename)
+                    file_obj = st.session_state.uploaded_files.get(normalized_key)
+                    if file_obj:
+                        uploaded_count += 1
+                        display_label = get_file_upload_label(csv_filename)
+                        uploaded_details.append(f"  • {display_label}: {file_obj.name}")
+
+                if uploaded_count > 0:
+                    st.success(
+                        f"✅ Required Data Files: {uploaded_count}/{len(required_files)} uploaded"
+                    )
+                    for detail in uploaded_details:
+                        st.info(detail)
+                else:
+                    st.warning(
+                        f"⚠️ Required Data Files: None uploaded ({len(required_files)} types needed)"
+                    )
+
+            except Exception as e:
+                st.error(f"Error checking upload status: {str(e)}")
+
+        # Validation button
+        if st.button("🔍 Validate Files", type="secondary"):
+            validation_result = validate_csv_files(
+                st.session_state.uploaded_files,
+                list(st.session_state.plot_types),
+                mapping_path,
+            )
+
+            if validation_result["is_valid"]:
+                st.success("✅ All files validated successfully!")
+            else:
+                st.error("❌ Validation failed:")
+                for error in validation_result["errors"]:
+                    st.error(f"  • {error}")
+
+            if validation_result["warnings"]:
+                st.warning("⚠️ Warnings:")
+                for warning in validation_result["warnings"]:
+                    st.warning(f"  • {warning}")
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -957,43 +1048,26 @@ with tab2:
 with tab3:
     st.header("Generate Plots")
 
-    # Check if all required files are uploaded based on selected plot types
+    # Check if all required files are uploaded based on plot type
+    if "aline" in st.session_state.plot_types:
+        all_files_uploaded = all(
+            st.session_state.uploaded_files.get(key) is not None
+            for key in ["location", "classification"]
+        )
+    else:
+        # For strength plots, need location and at least one test file
+        loc_uploaded = st.session_state.uploaded_files.get("location") is not None
+        test_files_uploaded = any(
+            k not in ["mapping", "location"] and v is not None
+            for k, v in st.session_state.uploaded_files.items()
+        )
+        all_files_uploaded = loc_uploaded and test_files_uploaded
+
+    # Check if mapping file exists in repo
     mapping_path = app_dir / "Global_Parameter_Mapping_Extraction_only_CORRECTED.csv"
     mapping_exists = mapping_path.exists()
 
-    # Use dynamic validation to check if required files are uploaded
-    all_files_uploaded = False
-    if len(st.session_state.plot_types) > 0 and mapping_exists:
-        try:
-            # Get required files for selected plot types
-            file_requirements = get_required_files_from_mapping(
-                mapping_path, list(st.session_state.plot_types)
-            )
-            required_files = file_requirements["required_files"]
-
-            # Check if location is uploaded (always required)
-            loc_uploaded = st.session_state.uploaded_files.get("location") is not None
-
-            # Check if at least one required file for each plot type is uploaded
-            uploaded_filenames = {
-                normalize_filename(f.name): key
-                for key, f in st.session_state.uploaded_files.items()
-                if f is not None and key != "location"
-            }
-
-            has_required_files = any(
-                normalize_filename(req_file) in uploaded_filenames
-                for req_file in required_files
-            )
-
-            all_files_uploaded = loc_uploaded and has_required_files
-        except Exception as e:
-            st.error(f"Error checking file requirements: {str(e)}")
-            all_files_uploaded = False
-
-    if len(st.session_state.plot_types) == 0:
-        st.warning("⚠️ Please select at least one plot type above")
-    elif not all_files_uploaded:
+    if not all_files_uploaded:
         st.warning("⚠️ Please upload all required files in the Upload Files tab")
     elif not mapping_exists:
         st.error("❌ Parameter mapping file not found in repository")
@@ -1063,11 +1137,6 @@ with tab3:
                         # Add mapping file from repo
                         input_files["mapping"] = mapping_path
 
-                        # Get dynamic parameter to files mapping
-                        param_file_mapping = map_uploaded_files_to_parameters(
-                            input_files, mapping_path, list(st.session_state.plot_types)
-                        )
-
                         # Create output directory
                         output_dir = temp_path / "output"
                         output_dir.mkdir(exist_ok=True)
@@ -1084,115 +1153,86 @@ with tab3:
 
                         # Generate plots based on selected plot types
                         if "aline" in st.session_state.plot_types:
-                            # Find files containing A-line parameters
-                            aline_files = set()
-                            for param in ["LiquidLimit", "PlasticityIndex"]:
-                                if param in param_file_mapping:
-                                    aline_files.update(param_file_mapping[param])
+                            # Map file keys to expected format for generate_aline_plots
+                            plot_input = {
+                                "mapping": input_files["mapping"],
+                                "location": input_files["location"],
+                                "classification": input_files["classification"],
+                            }
 
-                            if not aline_files:
-                                combined_results["success"] = False
-                                combined_results["errors"].append(
-                                    "A-line: No files found containing required parameters (LiquidLimit, PlasticityIndex)"
+                            # Create A-line specific output directory
+                            aline_output = output_dir / "aline"
+                            aline_output.mkdir(exist_ok=True)
+
+                            # Generate A-line plots
+                            aline_results = generate_aline_plots(
+                                input_files=plot_input,
+                                output_dir=aline_output,
+                                config_overrides=st.session_state.config_overrides,
+                            )
+
+                            # Accumulate results
+                            if aline_results["success"]:
+                                combined_results["formations_processed"].update(
+                                    aline_results["formations_processed"]
+                                )
+                                combined_results["plots_generated"] += aline_results[
+                                    "plots_generated"
+                                ]
+                                combined_results["parameter_names"].append(
+                                    aline_results["parameter_name"]
+                                )
+                                combined_results["output_folders"].append(
+                                    aline_results["output_folder"]
                                 )
                             else:
-                                # Map file keys to expected format for generate_aline_plots
-                                plot_input = {
-                                    "mapping": input_files["mapping"],
-                                    "location": input_files["location"],
-                                }
-
-                                # Add all files containing A-line parameters
-                                for file_path in aline_files:
-                                    # Use original filename as key for compatibility
-                                    file_key = normalize_filename(file_path.name)
-                                    plot_input[file_key] = file_path
-
-                                # Create A-line specific output directory
-                                aline_output = output_dir / "aline"
-                                aline_output.mkdir(exist_ok=True)
-
-                                # Generate A-line plots
-                                aline_results = generate_aline_plots(
-                                    input_files=plot_input,
-                                    output_dir=aline_output,
-                                    config_overrides=st.session_state.config_overrides,
+                                combined_results["success"] = False
+                                combined_results["errors"].append(
+                                    f"A-line: {aline_results['error']}"
                                 )
-
-                                # Accumulate results
-                                if aline_results["success"]:
-                                    combined_results["formations_processed"].update(
-                                        aline_results["formations_processed"]
-                                    )
-                                    combined_results[
-                                        "plots_generated"
-                                    ] += aline_results["plots_generated"]
-                                    combined_results["parameter_names"].append(
-                                        aline_results["parameter_name"]
-                                    )
-                                    combined_results["output_folders"].append(
-                                        aline_results["output_folder"]
-                                    )
-                                else:
-                                    combined_results["success"] = False
-                                    combined_results["errors"].append(
-                                        f"A-line: {aline_results['error']}"
-                                    )
 
                         if "strength" in st.session_state.plot_types:
-                            # Find files containing strength parameters
-                            strength_files = set()
-                            for param in ["UndrainedShearStrength"]:
-                                if param in param_file_mapping:
-                                    strength_files.update(param_file_mapping[param])
+                            # Map file keys to expected format for generate_strength_plots
+                            plot_input = {
+                                "mapping": input_files["mapping"],
+                                "location": input_files["location"],
+                            }
 
-                            if not strength_files:
-                                combined_results["success"] = False
-                                combined_results["errors"].append(
-                                    "Strength: No files found containing required parameters (UndrainedShearStrength)"
+                            # Add all test data files
+                            for key, value in input_files.items():
+                                if key not in ["mapping", "location", "classification"]:
+                                    plot_input[key] = value
+
+                            # Create strength specific output directory
+                            strength_output = output_dir / "strength"
+                            strength_output.mkdir(exist_ok=True)
+
+                            # Generate strength plots
+                            strength_results = generate_strength_plots(
+                                input_files=plot_input,
+                                output_dir=strength_output,
+                                config_overrides=st.session_state.config_overrides,
+                            )
+
+                            # Accumulate results
+                            if strength_results["success"]:
+                                combined_results["formations_processed"].update(
+                                    strength_results["formations_processed"]
+                                )
+                                combined_results["plots_generated"] += strength_results[
+                                    "plots_generated"
+                                ]
+                                combined_results["parameter_names"].append(
+                                    strength_results["parameter_name"]
+                                )
+                                combined_results["output_folders"].append(
+                                    strength_results["output_folder"]
                                 )
                             else:
-                                # Map file keys to expected format for generate_strength_plots
-                                plot_input = {
-                                    "mapping": input_files["mapping"],
-                                    "location": input_files["location"],
-                                }
-
-                                # Add all files containing strength parameters
-                                for file_path in strength_files:
-                                    file_key = normalize_filename(file_path.name)
-                                    plot_input[file_key] = file_path
-
-                                # Create strength specific output directory
-                                strength_output = output_dir / "strength"
-                                strength_output.mkdir(exist_ok=True)
-
-                                # Generate strength plots
-                                strength_results = generate_strength_plots(
-                                    input_files=plot_input,
-                                    output_dir=strength_output,
-                                    config_overrides=st.session_state.config_overrides,
+                                combined_results["success"] = False
+                                combined_results["errors"].append(
+                                    f"Strength: {strength_results['error']}"
                                 )
-
-                                # Accumulate results
-                                if strength_results["success"]:
-                                    combined_results["formations_processed"].update(
-                                        strength_results["formations_processed"]
-                                    )
-                                    combined_results[
-                                        "plots_generated"
-                                    ] += strength_results["plots_generated"]
-                                    combined_results["parameter_names"].append(
-                                        strength_results["parameter_name"]
-                                    )
-                                    combined_results["output_folders"].append(
-                                        strength_results["output_folder"]
-                                    )
-                                else:
-                                    combined_results["success"] = False
-                                    combined_results["errors"].append(
-                                        f"Strength: {strength_results['error']}"
-                                    )
 
                         # Store results in session state
                         st.session_state.processing_results = combined_results
