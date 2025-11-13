@@ -31,20 +31,28 @@ PLOT_TYPE_PARAMETERS: Dict[str, List[str]] = {
 # ═════════════════════════════════════════════════════════════════════════
 
 
-def get_required_files_from_mapping(
+def get_parameter_source_files(
     mapping_path: Path, plot_types: List[str]
-) -> Dict[str, Set[str]]:
+) -> Dict[str, List[Dict[str, Any]]]:
     """
-    Extract required CSV files from mapping CSV based on plot types.
+    Get all possible source files for each parameter, with priority information.
 
     Args:
         mapping_path: Path to the mapping CSV file
         plot_types: List of plot types (e.g., ["aline"], ["strength"])
 
     Returns:
-        Dictionary with keys:
-        - "required_files": Set of required CSV filenames
-        - "required_parameters": Set of required parameter names
+        Dictionary mapping parameter name -> list of source file info dicts.
+        Each dict contains: {"csv_file": str, "priority_rank": int}
+
+        Example:
+        {
+            "UndrainedShearStrength": [
+                {"csv_file": "Triaxial Total Stress by Geology.csv", "priority_rank": 1},
+                {"csv_file": "Vane Tests by Geology.csv", "priority_rank": 2},
+                ...
+            ]
+        }
     """
     if not mapping_path.exists():
         raise FileNotFoundError(f"Mapping CSV not found: {mapping_path}")
@@ -58,18 +66,64 @@ def get_required_files_from_mapping(
         if plot_type in PLOT_TYPE_PARAMETERS:
             required_params.update(PLOT_TYPE_PARAMETERS[plot_type])
 
-    # Find all CSV files that contain the required parameters
-    required_files: Set[str] = set()
+    # Build parameter -> source files mapping
+    param_sources: Dict[str, List[Dict[str, Any]]] = {}
+
     for param in required_params:
         param_rows = mapping_df[mapping_df["parameter"] == param]
         if not param_rows.empty:
-            # Add all CSV files for this parameter
-            csv_files = param_rows["csv_file"].dropna().unique()
-            required_files.update(csv_files)
+            sources = []
+            for _, row in param_rows.iterrows():
+                csv_file = row.get("csv_file")
+                priority = row.get("priority_rank", 999)  # Default low priority
+                if pd.notna(csv_file):
+                    sources.append({"csv_file": csv_file, "priority_rank": priority})
+
+            # Sort by priority (lower number = higher priority)
+            sources.sort(key=lambda x: x["priority_rank"])
+            param_sources[param] = sources
+
+    return param_sources
+
+
+def get_required_files_from_mapping(
+    mapping_path: Path, plot_types: List[str]
+) -> Dict[str, Set[str]]:
+    """
+    Extract ALL possible CSV files from mapping CSV based on plot types.
+
+    Note: This returns all possible source files, but validation only requires
+    at least one source file per parameter to be uploaded.
+
+    Args:
+        mapping_path: Path to the mapping CSV file
+        plot_types: List of plot types (e.g., ["aline"], ["strength"])
+
+    Returns:
+        Dictionary with keys:
+        - "all_files": Set of all possible CSV filenames
+        - "required_parameters": Set of required parameter names
+        - "parameter_sources": Dict mapping parameter -> list of source files
+    """
+    if not mapping_path.exists():
+        raise FileNotFoundError(f"Mapping CSV not found: {mapping_path}")
+
+    # Get parameter source file mapping
+    param_sources = get_parameter_source_files(mapping_path, plot_types)
+
+    # Collect all required parameters
+    required_params: Set[str] = set(param_sources.keys())
+
+    # Find all CSV files across all parameters
+    all_files: Set[str] = set()
+    for sources in param_sources.values():
+        for source in sources:
+            all_files.add(source["csv_file"])
 
     return {
-        "required_files": required_files,
+        "all_files": all_files,
         "required_parameters": required_params,
+        "parameter_sources": param_sources,
     }
 
 
@@ -269,14 +323,14 @@ def _validate_location_csv(location_file: Any) -> tuple[List[str], List[str]]:
 
 
 def _check_uploaded_files(
-    files: Dict[str, Any], required_csv_files: Set[str]
+    files: Dict[str, Any], parameter_sources: Dict[str, List[Dict[str, Any]]]
 ) -> tuple[List[str], List[str]]:
     """
-    Check if required files are uploaded.
+    Check if at least one source file per parameter is uploaded.
 
     Args:
         files: Dictionary of uploaded file objects
-        required_csv_files: Set of required CSV filenames
+        parameter_sources: Dict mapping parameter -> list of source file dicts
 
     Returns:
         Tuple of (errors, warnings) lists
@@ -291,23 +345,38 @@ def _check_uploaded_files(
         if f is not None and key != "location"
     }
 
-    # Check for missing required files
-    missing_files = []
-    for required_file in required_csv_files:
-        normalized_required = normalize_filename(required_file)
-        if normalized_required not in uploaded_filenames:
-            missing_files.append(required_file)
+    # Check each parameter has at least one source file uploaded
+    for param, sources in parameter_sources.items():
+        # Check if any source file for this parameter is uploaded
+        found_sources = []
+        missing_sources = []
 
-    if missing_files:
-        errors.append(
-            f"Missing required CSV files for selected plot types: "
-            f"{', '.join(missing_files)}"
-        )
-        warnings.append(
-            "Note: At least one file containing the required parameters "
-            "must be uploaded. Multiple files may contain the same parameter "
-            "with different priority ranks."
-        )
+        for source in sources:
+            csv_file = source["csv_file"]
+            normalized_csv = normalize_filename(csv_file)
+
+            if normalized_csv in uploaded_filenames:
+                found_sources.append(get_file_upload_label(csv_file))
+            else:
+                missing_sources.append(get_file_upload_label(csv_file))
+
+        # If no sources found for this parameter, it's an error
+        if not found_sources:
+            available_sources_str = ", ".join(
+                [get_file_upload_label(s["csv_file"]) for s in sources]
+            )
+            errors.append(
+                f"Parameter '{param}' requires at least one source file. "
+                f"Available sources: {available_sources_str}"
+            )
+        else:
+            # Parameter satisfied - optionally inform about additional sources
+            if len(missing_sources) > 0 and len(sources) > 1:
+                warnings.append(
+                    f"Parameter '{param}': Using {len(found_sources)} of {len(sources)} "
+                    f"available sources. Additional optional sources: {', '.join(missing_sources[:3])}"
+                    + ("..." if len(missing_sources) > 3 else "")
+                )
 
     return errors, warnings
 
@@ -317,6 +386,9 @@ def validate_csv_files(
 ) -> Dict[str, Any]:
     """
     Validate uploaded CSV files for geotechnical processing.
+
+    Validation ensures that for each required parameter, at least one source
+    file is uploaded. Additional source files for the same parameter are optional.
 
     Args:
         files: Dictionary of uploaded file objects
@@ -347,17 +419,17 @@ def validate_csv_files(
         errors.append("Missing required file: Location Details CSV")
         return {"is_valid": False, "errors": errors, "warnings": warnings}
 
-    # Get required files dynamically from mapping CSV
+    # Get parameter-aware file requirements from mapping CSV
     try:
         file_requirements = get_required_files_from_mapping(mapping_path, plot_types)
-        required_csv_files = file_requirements["required_files"]
+        parameter_sources = file_requirements["parameter_sources"]
         required_parameters = file_requirements["required_parameters"]
     except Exception as e:
         errors.append(f"Error reading mapping CSV: {str(e)}")
         return {"is_valid": False, "errors": errors, "warnings": warnings}
 
-    # Check if required files are uploaded
-    upload_errors, upload_warnings = _check_uploaded_files(files, required_csv_files)
+    # Check if at least one source file per parameter is uploaded
+    upload_errors, upload_warnings = _check_uploaded_files(files, parameter_sources)
     errors.extend(upload_errors)
     warnings.extend(upload_warnings)
 

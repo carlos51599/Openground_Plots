@@ -14,7 +14,7 @@ DELEGATES TO:
 import streamlit as st
 from pathlib import Path
 import tempfile
-from typing import Dict, Any
+from typing import Dict, Any, List
 import sys
 
 # Add directories to path for imports
@@ -41,8 +41,8 @@ from Streamlit_UndrainedShearStrength import generate_strength_plots
 # ═════════════════════════════════════════════════════════════════════════
 
 UI_CONFIG = {
-    "primary_color": "#642DE6AC",  # Purple - used for selected buttons, active states
-    "primary_dark": "#642DE6AC",  # Darker purple for hover states
+    "primary_color": "#17CED4FF",  # Purple - used for selected buttons, active states
+    "primary_dark": "#14AC97FF",  # Darker purple for hover states
 }
 
 
@@ -482,7 +482,7 @@ if background_path.exists():
             color: #4b5563 !important;
         }}
         
-        /* Logo styling - transparent with slight shadow */
+        /* Logo styling - fully transparent */
         .logo-container {{
             position: fixed;
             top: 100px;
@@ -492,7 +492,7 @@ if background_path.exists():
             padding: 0px;
             border-radius: 0px;
             border: none;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            box-shadow: none;
         }}
         
         .logo-container img {{
@@ -780,34 +780,108 @@ with tab1:
 
     if len(st.session_state.plot_types) > 0 and mapping_path.exists():
         try:
-            # Get required files from mapping
+            # Get parameter-aware file requirements from mapping
             file_requirements = get_required_files_from_mapping(
                 mapping_path, list(st.session_state.plot_types)
             )
-            required_files = sorted(file_requirements["required_files"])
+            parameter_sources = file_requirements["parameter_sources"]
+            all_files = sorted(file_requirements["all_files"])
 
-            # Display info about required files
-            st.markdown(
-                f"**Plot Specific Files ({len(required_files)} file types needed):**"
+            # Display info about parameter-based file requirements
+            st.markdown("**📊 Plot-Specific Data Files:**")
+            st.info(
+                "ℹ️ **Flexible File Upload:** For each parameter below, upload **at least one** "
+                "source file. Additional sources are optional but can improve data quality by "
+                "providing backup or alternative measurements."
             )
-            st.info("Upload at least one file containing the required parameters. ")
 
-            # Generate file uploaders dynamically
-            for csv_filename in required_files:
-                # Create normalized key for session state
-                normalized_key = normalize_filename(csv_filename)
-                upload_key = f"upload_{normalized_key}"
+            # Add custom CSS to increase file upload section font sizes
+            st.markdown(
+                """
+                <style>
+                /* Increase expander header font size - targeting the strong tags */
+                .streamlit-expanderHeader strong,
+                .streamlit-expanderHeader {
+                    font-size: 22px !important;
+                }
+                /* Increase file uploader label font size - targeting strong tags in labels */
+                .stFileUploader label strong,
+                .stFileUploader label {
+                    font-size: 20px !important;
+                }
+                /* Also increase div text inside expanders */
+                div[data-testid="stExpander"] strong {
+                    font-size: 20px !important;
+                }
+                /* Make expander summary (header) background less transparent */
+                div[data-testid="stExpander"] summary {
+                    background-color: rgba(255, 255, 255, 0.95) !important;
+                    backdrop-filter: blur(10px) !important;
+                }
+                /* Make expander details background less transparent */
+                div[data-testid="stExpanderDetails"] {
+                    background-color: rgba(255, 255, 255, 0.95) !important;
+                    backdrop-filter: blur(10px) !important;
+                }
+                </style>
+                """,
+                unsafe_allow_html=True,
+            )
 
-                # Get user-friendly label
-                display_label = get_file_upload_label(csv_filename)
+            # Track which files have already been added to avoid duplicates
+            files_already_displayed: Dict[str, List[str]] = {}
 
-                # Create file uploader with larger font
-                st.session_state.uploaded_files[normalized_key] = st.file_uploader(
-                    f"**{display_label}**",
-                    type=["csv"],
-                    key=upload_key,
-                    help=f"Upload {csv_filename}",
-                )
+            # Group files by parameter and display
+            for param, sources in sorted(parameter_sources.items()):
+                with st.expander(
+                    f"📈 **Parameter: {param}** "
+                    f"(minimum 1 of {len(sources)} sources required)",
+                    expanded=True,
+                ):
+                    # Use larger font for instruction text
+                    st.markdown(
+                        f"<p style='font-size: 16px;'><em>Upload at least one source file for {param}.</em></p>",
+                        unsafe_allow_html=True,
+                    )
+
+                    # Display each source file for this parameter
+                    for idx, source in enumerate(sources):
+                        csv_filename = source["csv_file"]
+
+                        # Create normalized key for session state
+                        normalized_key = normalize_filename(csv_filename)
+
+                        # Check if this file has already been displayed
+                        if normalized_key in files_already_displayed:
+                            # File already displayed for another parameter - show reference
+                            other_params = files_already_displayed[normalized_key]
+                            display_label = get_file_upload_label(csv_filename)
+
+                            st.info(
+                                f"📎 **{display_label}** is also used for: {', '.join(other_params)}\n\n"
+                                f"Upload this file once in the section above."
+                            )
+                            continue
+
+                        # Track this file for this parameter
+                        if normalized_key not in files_already_displayed:
+                            files_already_displayed[normalized_key] = []
+                        files_already_displayed[normalized_key].append(param)
+
+                        upload_key = f"upload_{normalized_key}"
+
+                        # Get user-friendly label
+                        display_label = get_file_upload_label(csv_filename)
+
+                        # Create file uploader
+                        st.session_state.uploaded_files[normalized_key] = (
+                            st.file_uploader(
+                                f"**{display_label}**",
+                                type=["csv"],
+                                key=upload_key,
+                                help=f"Source file for {param}\nFile: {csv_filename}",
+                            )
+                        )
 
         except Exception as e:
             st.error(f"Error loading file requirements: {str(e)}")
@@ -965,28 +1039,39 @@ with tab3:
     all_files_uploaded = False
     if len(st.session_state.plot_types) > 0 and mapping_exists:
         try:
-            # Get required files for selected plot types
+            # Get parameter-aware file requirements for selected plot types
             file_requirements = get_required_files_from_mapping(
                 mapping_path, list(st.session_state.plot_types)
             )
-            required_files = file_requirements["required_files"]
+            parameter_sources = file_requirements["parameter_sources"]
 
             # Check if location is uploaded (always required)
             loc_uploaded = st.session_state.uploaded_files.get("location") is not None
 
-            # Check if at least one required file for each plot type is uploaded
+            # Check if at least one source file per parameter is uploaded
             uploaded_filenames = {
                 normalize_filename(f.name): key
                 for key, f in st.session_state.uploaded_files.items()
                 if f is not None and key != "location"
             }
 
-            has_required_files = any(
-                normalize_filename(req_file) in uploaded_filenames
-                for req_file in required_files
-            )
+            # Check each parameter has at least one source file
+            has_all_parameters = True
+            for param, sources in parameter_sources.items():
+                # Check if any source file for this parameter is uploaded
+                param_has_source = False
+                for source in sources:
+                    csv_file = source["csv_file"]
+                    normalized_csv = normalize_filename(csv_file)
+                    if normalized_csv in uploaded_filenames:
+                        param_has_source = True
+                        break
 
-            all_files_uploaded = loc_uploaded and has_required_files
+                if not param_has_source:
+                    has_all_parameters = False
+                    break
+
+            all_files_uploaded = loc_uploaded and has_all_parameters
         except Exception as e:
             st.error(f"Error checking file requirements: {str(e)}")
             all_files_uploaded = False

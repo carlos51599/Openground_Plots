@@ -29,6 +29,7 @@ from validation import (
     get_required_files_from_mapping,
     get_file_upload_label,
     normalize_filename,
+    map_uploaded_files_to_parameters,
 )
 from zip_utils import create_zip_archive
 from Streamlit_A_line import generate_aline_plots
@@ -40,8 +41,8 @@ from Streamlit_UndrainedShearStrength import generate_strength_plots
 # ═════════════════════════════════════════════════════════════════════════
 
 UI_CONFIG = {
-    "primary_color": "#642DE6AC",  # Purple - used for selected buttons, active states
-    "primary_dark": "#642DE6AC",  # Darker purple for hover states
+    "primary_color": "#17CED4FF",  # Purple - used for selected buttons, active states
+    "primary_dark": "#14AC97FF",  # Darker purple for hover states
 }
 
 
@@ -1062,6 +1063,11 @@ with tab3:
                         # Add mapping file from repo
                         input_files["mapping"] = mapping_path
 
+                        # Get dynamic parameter to files mapping
+                        param_file_mapping = map_uploaded_files_to_parameters(
+                            input_files, mapping_path, list(st.session_state.plot_types)
+                        )
+
                         # Create output directory
                         output_dir = temp_path / "output"
                         output_dir.mkdir(exist_ok=True)
@@ -1078,86 +1084,115 @@ with tab3:
 
                         # Generate plots based on selected plot types
                         if "aline" in st.session_state.plot_types:
-                            # Map file keys to expected format for generate_aline_plots
-                            plot_input = {
-                                "mapping": input_files["mapping"],
-                                "location": input_files["location"],
-                                "classification": input_files["classification"],
-                            }
+                            # Find files containing A-line parameters
+                            aline_files = set()
+                            for param in ["LiquidLimit", "PlasticityIndex"]:
+                                if param in param_file_mapping:
+                                    aline_files.update(param_file_mapping[param])
 
-                            # Create A-line specific output directory
-                            aline_output = output_dir / "aline"
-                            aline_output.mkdir(exist_ok=True)
-
-                            # Generate A-line plots
-                            aline_results = generate_aline_plots(
-                                input_files=plot_input,
-                                output_dir=aline_output,
-                                config_overrides=st.session_state.config_overrides,
-                            )
-
-                            # Accumulate results
-                            if aline_results["success"]:
-                                combined_results["formations_processed"].update(
-                                    aline_results["formations_processed"]
-                                )
-                                combined_results["plots_generated"] += aline_results[
-                                    "plots_generated"
-                                ]
-                                combined_results["parameter_names"].append(
-                                    aline_results["parameter_name"]
-                                )
-                                combined_results["output_folders"].append(
-                                    aline_results["output_folder"]
-                                )
-                            else:
+                            if not aline_files:
                                 combined_results["success"] = False
                                 combined_results["errors"].append(
-                                    f"A-line: {aline_results['error']}"
+                                    "A-line: No files found containing required parameters (LiquidLimit, PlasticityIndex)"
                                 )
+                            else:
+                                # Map file keys to expected format for generate_aline_plots
+                                plot_input = {
+                                    "mapping": input_files["mapping"],
+                                    "location": input_files["location"],
+                                }
+
+                                # Add all files containing A-line parameters
+                                for file_path in aline_files:
+                                    # Use original filename as key for compatibility
+                                    file_key = normalize_filename(file_path.name)
+                                    plot_input[file_key] = file_path
+
+                                # Create A-line specific output directory
+                                aline_output = output_dir / "aline"
+                                aline_output.mkdir(exist_ok=True)
+
+                                # Generate A-line plots
+                                aline_results = generate_aline_plots(
+                                    input_files=plot_input,
+                                    output_dir=aline_output,
+                                    config_overrides=st.session_state.config_overrides,
+                                )
+
+                                # Accumulate results
+                                if aline_results["success"]:
+                                    combined_results["formations_processed"].update(
+                                        aline_results["formations_processed"]
+                                    )
+                                    combined_results[
+                                        "plots_generated"
+                                    ] += aline_results["plots_generated"]
+                                    combined_results["parameter_names"].append(
+                                        aline_results["parameter_name"]
+                                    )
+                                    combined_results["output_folders"].append(
+                                        aline_results["output_folder"]
+                                    )
+                                else:
+                                    combined_results["success"] = False
+                                    combined_results["errors"].append(
+                                        f"A-line: {aline_results['error']}"
+                                    )
 
                         if "strength" in st.session_state.plot_types:
-                            # Map file keys to expected format for generate_strength_plots
-                            plot_input = {
-                                "mapping": input_files["mapping"],
-                                "location": input_files["location"],
-                            }
+                            # Find files containing strength parameters
+                            strength_files = set()
+                            for param in ["UndrainedShearStrength"]:
+                                if param in param_file_mapping:
+                                    strength_files.update(param_file_mapping[param])
 
-                            # Add all test data files
-                            for key, value in input_files.items():
-                                if key not in ["mapping", "location", "classification"]:
-                                    plot_input[key] = value
-
-                            # Create strength specific output directory
-                            strength_output = output_dir / "strength"
-                            strength_output.mkdir(exist_ok=True)
-
-                            # Generate strength plots
-                            strength_results = generate_strength_plots(
-                                input_files=plot_input,
-                                output_dir=strength_output,
-                                config_overrides=st.session_state.config_overrides,
-                            )
-
-                            # Accumulate results
-                            if strength_results["success"]:
-                                combined_results["formations_processed"].update(
-                                    strength_results["formations_processed"]
-                                )
-                                combined_results["plots_generated"] += strength_results[
-                                    "plots_generated"
-                                ]
-                                combined_results["parameter_names"].append(
-                                    strength_results["parameter_name"]
-                                )
-                                combined_results["output_folders"].append(
-                                    strength_results["output_folder"]
-                                )
-                            else:
+                            if not strength_files:
                                 combined_results["success"] = False
                                 combined_results["errors"].append(
-                                    f"Strength: {strength_results['error']}"
+                                    "Strength: No files found containing required parameters (UndrainedShearStrength)"
                                 )
+                            else:
+                                # Map file keys to expected format for generate_strength_plots
+                                plot_input = {
+                                    "mapping": input_files["mapping"],
+                                    "location": input_files["location"],
+                                }
+
+                                # Add all files containing strength parameters
+                                for file_path in strength_files:
+                                    file_key = normalize_filename(file_path.name)
+                                    plot_input[file_key] = file_path
+
+                                # Create strength specific output directory
+                                strength_output = output_dir / "strength"
+                                strength_output.mkdir(exist_ok=True)
+
+                                # Generate strength plots
+                                strength_results = generate_strength_plots(
+                                    input_files=plot_input,
+                                    output_dir=strength_output,
+                                    config_overrides=st.session_state.config_overrides,
+                                )
+
+                                # Accumulate results
+                                if strength_results["success"]:
+                                    combined_results["formations_processed"].update(
+                                        strength_results["formations_processed"]
+                                    )
+                                    combined_results[
+                                        "plots_generated"
+                                    ] += strength_results["plots_generated"]
+                                    combined_results["parameter_names"].append(
+                                        strength_results["parameter_name"]
+                                    )
+                                    combined_results["output_folders"].append(
+                                        strength_results["output_folder"]
+                                    )
+                                else:
+                                    combined_results["success"] = False
+                                    combined_results["errors"].append(
+                                        f"Strength: {strength_results['error']}"
+                                    )
 
                         # Store results in session state
                         st.session_state.processing_results = combined_results
